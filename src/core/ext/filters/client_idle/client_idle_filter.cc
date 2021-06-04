@@ -27,10 +27,9 @@
 #include "src/core/lib/surface/channel_init.h"
 #include "src/core/lib/transport/http2_errors.h"
 
-// The idle filter is enabled in client channel by default.
-// Set GRPC_ARG_CLIENT_IDLE_TIMEOUT_MS to [1000, INT_MAX) in channel args to
-// configure the idle timeout.
-#define DEFAULT_IDLE_TIMEOUT_MS (30 /*minutes*/ * 60 * 1000)
+// TODO(juanlishen): The idle filter is disabled in client channel by default
+// due to b/143502997. Try to fix the bug and enable the filter by default.
+#define DEFAULT_IDLE_TIMEOUT_MS INT_MAX
 // The user input idle timeout smaller than this would be capped to it.
 #define MIN_IDLE_TIMEOUT_MS (1 /*second*/ * 1000)
 
@@ -127,8 +126,8 @@ grpc_millis GetClientIdleTimeout(const grpc_channel_args* args) {
 
 class ChannelData {
  public:
-  static grpc_error* Init(grpc_channel_element* elem,
-                          grpc_channel_element_args* args);
+  static grpc_error_handle Init(grpc_channel_element* elem,
+                                grpc_channel_element_args* args);
   static void Destroy(grpc_channel_element* elem);
 
   static void StartTransportOp(grpc_channel_element* elem,
@@ -140,11 +139,12 @@ class ChannelData {
 
  private:
   ChannelData(grpc_channel_element* elem, grpc_channel_element_args* args,
-              grpc_error** error);
+              grpc_error_handle* error);
   ~ChannelData() = default;
 
-  static void IdleTimerCallback(void* arg, grpc_error* error);
-  static void IdleTransportOpCompleteCallback(void* arg, grpc_error* error);
+  static void IdleTimerCallback(void* arg, grpc_error_handle error);
+  static void IdleTransportOpCompleteCallback(void* arg,
+                                              grpc_error_handle error);
 
   void StartIdleTimer();
 
@@ -171,9 +171,9 @@ class ChannelData {
   grpc_closure idle_transport_op_complete_callback_;
 };
 
-grpc_error* ChannelData::Init(grpc_channel_element* elem,
-                              grpc_channel_element_args* args) {
-  grpc_error* error = GRPC_ERROR_NONE;
+grpc_error_handle ChannelData::Init(grpc_channel_element* elem,
+                                    grpc_channel_element_args* args) {
+  grpc_error_handle error = GRPC_ERROR_NONE;
   new (elem->channel_data) ChannelData(elem, args, &error);
   return error;
 }
@@ -187,8 +187,8 @@ void ChannelData::StartTransportOp(grpc_channel_element* elem,
                                    grpc_transport_op* op) {
   ChannelData* chand = static_cast<ChannelData*>(elem->channel_data);
   // Catch the disconnect_with_error transport op.
-  if (op->disconnect_with_error != nullptr) {
-    // IncreaseCallCount() introduces a dummy call and prevent the timer from
+  if (op->disconnect_with_error != GRPC_ERROR_NONE) {
+    // IncreaseCallCount() introduces a phony call and prevent the timer from
     // being reset by other threads.
     chand->IncreaseCallCount();
     // If the timer has been set, cancel the timer.
@@ -283,7 +283,8 @@ void ChannelData::DecreaseCallCount() {
 }
 
 ChannelData::ChannelData(grpc_channel_element* elem,
-                         grpc_channel_element_args* args, grpc_error** error)
+                         grpc_channel_element_args* args,
+                         grpc_error_handle* /*error*/)
     : elem_(elem),
       channel_stack_(args->channel_stack),
       client_idle_timeout_(GetClientIdleTimeout(args->channel_args)) {
@@ -303,7 +304,7 @@ ChannelData::ChannelData(grpc_channel_element* elem,
                     grpc_schedule_on_exec_ctx);
 }
 
-void ChannelData::IdleTimerCallback(void* arg, grpc_error* error) {
+void ChannelData::IdleTimerCallback(void* arg, grpc_error_handle error) {
   GRPC_IDLE_FILTER_LOG("timer alarms");
   ChannelData* chand = static_cast<ChannelData*>(arg);
   if (error != GRPC_ERROR_NONE) {
@@ -352,7 +353,7 @@ void ChannelData::IdleTimerCallback(void* arg, grpc_error* error) {
 }
 
 void ChannelData::IdleTransportOpCompleteCallback(void* arg,
-                                                  grpc_error* error) {
+                                                  grpc_error_handle /*error*/) {
   ChannelData* chand = static_cast<ChannelData*>(arg);
   GRPC_CHANNEL_STACK_UNREF(chand->channel_stack_, "idle transport op");
 }
@@ -381,23 +382,23 @@ void ChannelData::EnterIdle() {
 
 class CallData {
  public:
-  static grpc_error* Init(grpc_call_element* elem,
-                          const grpc_call_element_args* args);
+  static grpc_error_handle Init(grpc_call_element* elem,
+                                const grpc_call_element_args* args);
   static void Destroy(grpc_call_element* elem,
                       const grpc_call_final_info* final_info,
                       grpc_closure* then_schedule_closure);
 };
 
-grpc_error* CallData::Init(grpc_call_element* elem,
-                           const grpc_call_element_args* args) {
+grpc_error_handle CallData::Init(grpc_call_element* elem,
+                                 const grpc_call_element_args* /*args*/) {
   ChannelData* chand = static_cast<ChannelData*>(elem->channel_data);
   chand->IncreaseCallCount();
   return GRPC_ERROR_NONE;
 }
 
 void CallData::Destroy(grpc_call_element* elem,
-                       const grpc_call_final_info* final_info,
-                       grpc_closure* ignored) {
+                       const grpc_call_final_info* /*final_info*/,
+                       grpc_closure* /*ignored*/) {
   ChannelData* chand = static_cast<ChannelData*>(elem->channel_data);
   chand->DecreaseCallCount();
 }
@@ -416,7 +417,7 @@ const grpc_channel_filter grpc_client_idle_filter = {
     "client_idle"};
 
 static bool MaybeAddClientIdleFilter(grpc_channel_stack_builder* builder,
-                                     void* arg) {
+                                     void* /*arg*/) {
   const grpc_channel_args* channel_args =
       grpc_channel_stack_builder_get_channel_arguments(builder);
   if (!grpc_channel_args_want_minimal_stack(channel_args) &&

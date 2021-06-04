@@ -16,11 +16,6 @@
  *
  */
 
-/**
- * This is the legacy interface of this gRPC library. This API is deprecated and users should use
- * the API in GRPCCall.h. This API exists solely for the purpose of backwards compatibility.
- */
-
 #import <RxLibrary/GRXWriter.h>
 #import "GRPCTypes.h"
 
@@ -28,8 +23,8 @@
 #pragma clang diagnostic ignored "-Wnullability-completeness"
 
 /**
- * This interface is deprecated. Please use \a GRPCCall2.
- *
+ * This is the legacy interface of this gRPC library. This API is deprecated and users should use
+ * GRPCCall2 in GRPCCall.h. This API exists solely for the purpose of backwards compatibility.
  * Represents a single gRPC remote call.
  */
 @interface GRPCCall : GRXWriter
@@ -117,7 +112,7 @@
 
 /** This protocol is kept for backwards compatibility with existing code. */
 DEPRECATED_MSG_ATTRIBUTE("Use NSDictionary or NSMutableDictionary instead.")
-@protocol GRPCRequestHeaders<NSObject>
+@protocol GRPCRequestHeaders <NSObject>
 @property(nonatomic, readonly) NSUInteger count;
 
 - (id)objectForKeyedSubscript:(id)key;
@@ -130,7 +125,7 @@ DEPRECATED_MSG_ATTRIBUTE("Use NSDictionary or NSMutableDictionary instead.")
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated"
 /** This is only needed for backwards-compatibility. */
-@interface NSMutableDictionary (GRPCRequestHeaders)<GRPCRequestHeaders>
+@interface NSMutableDictionary (GRPCRequestHeaders) <GRPCRequestHeaders>
 @end
 #pragma clang diagnostic pop
 #pragma clang diagnostic pop

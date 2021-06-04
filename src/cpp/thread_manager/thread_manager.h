@@ -19,10 +19,8 @@
 #ifndef GRPC_INTERNAL_CPP_THREAD_MANAGER_H
 #define GRPC_INTERNAL_CPP_THREAD_MANAGER_H
 
-#include <condition_variable>
 #include <list>
 #include <memory>
-#include <mutex>
 
 #include <grpcpp/support/config.h>
 
@@ -121,8 +119,11 @@ class ThreadManager {
   // not be called (and the need for this WorkerThread class is eliminated)
   class WorkerThread {
    public:
-    WorkerThread(ThreadManager* thd_mgr);
+    explicit WorkerThread(ThreadManager* thd_mgr);
     ~WorkerThread();
+
+    bool created() const { return created_; }
+    void Start() { thd_.Start(); }
 
    private:
     // Calls thd_mgr_->MainWorkLoop() and once that completes, calls
@@ -131,6 +132,7 @@ class ThreadManager {
 
     ThreadManager* const thd_mgr_;
     grpc_core::Thread thd_;
+    bool created_;
   };
 
   // The main function in ThreadManager

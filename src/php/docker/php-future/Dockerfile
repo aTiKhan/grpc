@@ -12,29 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM php:7.4.0RC1-buster
+FROM php:7.4.11-buster
 
 RUN apt-get -qq update && apt-get -qq install -y \
   autoconf automake git libtool pkg-config \
-  wget zlib1g-dev
+  valgrind wget zlib1g-dev
+
+ARG MAKEFLAGS=-j8
 
 
 WORKDIR /tmp
 
-RUN wget https://phar.phpunit.de/phpunit-4.8.36.phar && \
-  mv phpunit-4.8.36.phar /usr/local/bin/phpunit && \
+RUN wget https://phar.phpunit.de/phpunit-8.5.13.phar && \
+  mv phpunit-8.5.13.phar /usr/local/bin/phpunit && \
   chmod +x /usr/local/bin/phpunit
 
 
 WORKDIR /github/grpc
 
-RUN git clone https://github.com/grpc/grpc . && \
-  git submodule update --init
-
-COPY src/ ./src
+COPY . .
 
 RUN pear package && \
   find . -name grpc-*.tgz | xargs -I{} pecl install {}
 
 
-CMD ["/github/grpc/src/php/bin/run_tests.sh", "--skip-persistent-channel-tests"]
+CMD ["/github/grpc/src/php/bin/run_tests.sh", "--skip-persistent-channel-tests", "--ignore-valgrind-undef-errors"]

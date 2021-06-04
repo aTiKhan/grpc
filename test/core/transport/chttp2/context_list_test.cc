@@ -36,10 +36,10 @@ namespace {
 
 const uint32_t kByteOffset = 123;
 
-void* DummyArgsCopier(void* arg) { return arg; }
+void* PhonyArgsCopier(void* arg) { return arg; }
 
 void TestExecuteFlushesListVerifier(void* arg, grpc_core::Timestamps* ts,
-                                    grpc_error* error) {
+                                    grpc_error_handle error) {
   ASSERT_NE(arg, nullptr);
   EXPECT_EQ(error, GRPC_ERROR_NONE);
   if (ts) {
@@ -49,13 +49,13 @@ void TestExecuteFlushesListVerifier(void* arg, grpc_core::Timestamps* ts,
   gpr_atm_rel_store(done, static_cast<gpr_atm>(1));
 }
 
-void discard_write(grpc_slice slice) {}
+void discard_write(grpc_slice /*slice*/) {}
 
 class ContextListTest : public ::testing::Test {
  protected:
   void SetUp() override {
     grpc_http2_set_write_timestamps_callback(TestExecuteFlushesListVerifier);
-    grpc_http2_set_fn_get_copied_context(DummyArgsCopier);
+    grpc_http2_set_fn_get_copied_context(PhonyArgsCopier);
   }
 };
 
@@ -68,7 +68,7 @@ TEST_F(ContextListTest, ExecuteFlushesList) {
   const int kNumElems = 5;
   grpc_core::ExecCtx exec_ctx;
   grpc_stream_refcount ref;
-  GRPC_STREAM_REF_INIT(&ref, 1, nullptr, nullptr, "dummy ref");
+  GRPC_STREAM_REF_INIT(&ref, 1, nullptr, nullptr, "phony ref");
   grpc_resource_quota* resource_quota =
       grpc_resource_quota_create("context_list_test");
   grpc_endpoint* mock_endpoint =
@@ -124,7 +124,7 @@ TEST_F(ContextListTest, NonEmptyListEmptyTimestamp) {
   const int kNumElems = 5;
   grpc_core::ExecCtx exec_ctx;
   grpc_stream_refcount ref;
-  GRPC_STREAM_REF_INIT(&ref, 1, nullptr, nullptr, "dummy ref");
+  GRPC_STREAM_REF_INIT(&ref, 1, nullptr, nullptr, "phony ref");
   grpc_resource_quota* resource_quota =
       grpc_resource_quota_create("context_list_test");
   grpc_endpoint* mock_endpoint =
@@ -164,8 +164,10 @@ TEST_F(ContextListTest, NonEmptyListEmptyTimestamp) {
 }  // namespace grpc_core
 
 int main(int argc, char** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
   grpc::testing::TestEnvironment env(argc, argv);
   grpc_init();
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
+  int ret = RUN_ALL_TESTS();
+  grpc_shutdown();
+  return ret;
 }

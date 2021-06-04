@@ -11,25 +11,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import logging
 import unittest
 
-from grpc.experimental import aio
-from tests_aio.unit import test_base
 
+class TestInit(unittest.TestCase):
 
-class TestInsecureChannel(test_base.AioTestBase):
+    def test_grpc(self):
+        import grpc  # pylint: disable=wrong-import-position
+        channel = grpc.aio.insecure_channel('phony')
+        self.assertIsInstance(channel, grpc.aio.Channel)
 
-    def test_insecure_channel(self):
-
-        async def coro():
-            channel = aio.insecure_channel(self.server_target)
-            self.assertIsInstance(channel, aio.Channel)
-
-        self.loop.run_until_complete(coro())
+    def test_grpc_dot_aio(self):
+        import grpc.aio  # pylint: disable=wrong-import-position
+        channel = grpc.aio.insecure_channel('phony')
+        self.assertIsInstance(channel, grpc.aio.Channel)
 
 
 if __name__ == '__main__':
-    logging.basicConfig()
+    logging.basicConfig(level=logging.DEBUG)
     unittest.main(verbosity=2)

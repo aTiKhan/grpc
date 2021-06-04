@@ -13,9 +13,9 @@
 # limitations under the License.
 # distutils: language=c++
 
-cimport cpython
 from libc cimport string
 import errno
+import sys
 gevent_g = None
 gevent_socket = None
 gevent_hub = None
@@ -32,13 +32,17 @@ def _spawn_greenlet(*args):
 
 cdef class SocketWrapper:
   def __cinit__(self):
+    fork_handlers_and_grpc_init()
     self.sockopts = []
     self.socket = None
     self.c_socket = NULL
     self.c_buffer = NULL
     self.len = 0
 
-cdef grpc_error* socket_init(grpc_custom_socket* socket, int domain) with gil:
+  def __dealloc__(self):
+    grpc_shutdown()
+
+cdef grpc_error_handle socket_init(grpc_custom_socket* socket, int domain) with gil:
   sw = SocketWrapper()
   sw.c_socket = socket
   sw.sockopts = []
@@ -165,7 +169,7 @@ cdef void socket_read(grpc_custom_socket* socket, char* buffer,
   sw.len = length
   _spawn_greenlet(socket_read_async, sw)
 
-cdef grpc_error* socket_getpeername(grpc_custom_socket* socket,
+cdef grpc_error_handle socket_getpeername(grpc_custom_socket* socket,
                                     const grpc_sockaddr* addr,
                                     int* length) with gil:
   cdef char* src_buf
@@ -178,7 +182,7 @@ cdef grpc_error* socket_getpeername(grpc_custom_socket* socket,
   length[0] = c_addr.len
   return grpc_error_none()  
 
-cdef grpc_error* socket_getsockname(grpc_custom_socket* socket,
+cdef grpc_error_handle socket_getsockname(grpc_custom_socket* socket,
                                     const grpc_sockaddr* addr,
                                     int* length) with gil:
   cdef char* src_buf
@@ -197,7 +201,7 @@ def applysockopts(s):
   s.setsockopt(gevent_socket.SOL_SOCKET, gevent_socket.SO_REUSEADDR, 1)
   s.setsockopt(gevent_socket.IPPROTO_TCP, gevent_socket.TCP_NODELAY, True)
 
-cdef grpc_error* socket_bind(grpc_custom_socket* socket,
+cdef grpc_error_handle socket_bind(grpc_custom_socket* socket,
                              const grpc_sockaddr* addr,
                              size_t len, int flags) with gil:
   addr_tuple = sockaddr_to_tuple(addr, len)
@@ -216,7 +220,7 @@ cdef grpc_error* socket_bind(grpc_custom_socket* socket,
   else:
     return grpc_error_none()
 
-cdef grpc_error* socket_listen(grpc_custom_socket* socket) with gil:
+cdef grpc_error_handle socket_listen(grpc_custom_socket* socket) with gil:
   (<SocketWrapper>socket.impl).socket.listen(50)
   return grpc_error_none()
 
@@ -258,9 +262,13 @@ cdef void socket_accept(grpc_custom_socket* socket, grpc_custom_socket* client,
 
 cdef class ResolveWrapper:
   def __cinit__(self):
+    fork_handlers_and_grpc_init()
     self.c_resolver = NULL
     self.c_host = NULL
     self.c_port = NULL
+
+  def __dealloc__(self):
+    grpc_shutdown()
 
 cdef socket_resolve_async_cython(ResolveWrapper resolve_wrapper):
   try:
@@ -276,14 +284,14 @@ cdef socket_resolve_async_cython(ResolveWrapper resolve_wrapper):
 def socket_resolve_async_python(resolve_wrapper):
   socket_resolve_async_cython(resolve_wrapper)
 
-cdef void socket_resolve_async(grpc_custom_resolver* r, char* host, char* port) with gil:
+cdef void socket_resolve_async(grpc_custom_resolver* r, const char* host, const char* port) with gil:
   rw = ResolveWrapper()
   rw.c_resolver = r
   rw.c_host = host
   rw.c_port = port
   _spawn_greenlet(socket_resolve_async_python, rw)
 
-cdef grpc_error* socket_resolve(char* host, char* port,
+cdef grpc_error_handle socket_resolve(const char* host, const char* port,
                                 grpc_resolved_addresses** res) with gil:
     try:
       result = gevent_socket.getaddrinfo(host, port)
@@ -298,6 +306,7 @@ cdef grpc_error* socket_resolve(char* host, char* port,
 
 cdef class TimerWrapper:
   def __cinit__(self, deadline):
+    fork_handlers_and_grpc_init()
     self.timer = gevent_hub.get_hub().loop.timer(deadline)
     self.event = None
 
@@ -313,6 +322,9 @@ cdef class TimerWrapper:
   def stop(self):
     self.event.set()
     self.timer.stop()
+
+  def __dealloc__(self):
+    grpc_shutdown()
 
 cdef void timer_start(grpc_custom_timer* t) with gil:
   timer = TimerWrapper(t.timeout_ms / 1000.0)
@@ -337,11 +349,23 @@ cdef void destroy_loop() with gil:
 cdef void kick_loop() with gil:
   g_event.set()
 
-cdef void run_loop(size_t timeout_ms) with gil:
-    timeout = timeout_ms / 1000.0
-    if timeout_ms > 0:
+def _run_loop(timeout_ms):
+  timeout = timeout_ms / 1000.0
+  if timeout_ms > 0:
+    try:
       g_event.wait(timeout)
+    finally:
       g_event.clear()
+
+cdef grpc_error* run_loop(size_t timeout_ms) with gil:
+  try:
+    _run_loop(timeout_ms)
+    return grpc_error_none()
+  except BaseException:
+    exc_info = sys.exc_info()
+    # Avoid running any Python code after setting the exception
+    cpython.PyErr_SetObject(exc_info[0], exc_info[1])
+    return GRPC_ERROR_CANCELLED
 
 ###############################
 ### Initializer ###############

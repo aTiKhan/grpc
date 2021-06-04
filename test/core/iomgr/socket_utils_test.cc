@@ -19,7 +19,7 @@
 #include "src/core/lib/iomgr/port.h"
 
 // This test won't work except with posix sockets enabled
-#ifdef GRPC_POSIX_SOCKET
+#ifdef GRPC_POSIX_SOCKET_UTILS_COMMON
 
 #include "src/core/lib/iomgr/socket_utils_posix.h"
 
@@ -80,7 +80,7 @@ static const grpc_socket_mutator_vtable mutator_vtable = {
 
 int main(int argc, char** argv) {
   int sock;
-  grpc_error* err;
+  grpc_error_handle err;
   grpc::testing::TestEnvironment env(argc, argv);
 
   sock = socket(PF_INET, SOCK_STREAM, 0);
@@ -132,8 +132,8 @@ int main(int argc, char** argv) {
   return 0;
 }
 
-#else /* GRPC_POSIX_SOCKET */
+#else /* GRPC_POSIX_SOCKET_UTILS_COMMON */
 
 int main(int argc, char** argv) { return 1; }
 
-#endif /* GRPC_POSIX_SOCKET */
+#endif /* GRPC_POSIX_SOCKET_UTILS_COMMON */

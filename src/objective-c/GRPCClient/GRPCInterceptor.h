@@ -17,6 +17,7 @@
  */
 
 /**
+ * \file GRPCInterceptor.h
  * API for interceptors implementation. This feature is currently EXPERIMENTAL and is subject to
  * breaking changes without prior notice.
  *
@@ -24,30 +25,31 @@
  * interceptor on the chain has chances to react to events of the call and make necessary
  * modifications to the call's parameters, data, metadata, or flow.
  *
- *
- *                                   -----------
- *                                  | GRPCCall2 |
- *                                   -----------
- *                                        |
- *                                        |
- *                           --------------------------
- *                          | GRPCInterceptorManager 1 |
- *                           --------------------------
- *                          | GRPCInterceptor 1        |
- *                           --------------------------
- *                                        |
- *                                       ...
- *                                        |
- *                           --------------------------
- *                          | GRPCInterceptorManager N |
- *                           --------------------------
- *                          | GRPCInterceptor N        |
- *                           --------------------------
- *                                        |
- *                                        |
- *                               ------------------
- *                              | GRPCCallInternal |
- *                               ------------------
+ * \verbatim
+                                     -----------
+                                    | GRPCCall2 |
+                                     -----------
+                                          |
+                                          |
+                             --------------------------
+                            | GRPCInterceptorManager 1 |
+                             --------------------------
+                            | GRPCInterceptor 1        |
+                             --------------------------
+                                          |
+                                         ...
+                                          |
+                             --------------------------
+                            | GRPCInterceptorManager N |
+                             --------------------------
+                            | GRPCInterceptor N        |
+                             --------------------------
+                                          |
+                                          |
+                                 ------------------
+                                | GRPCCallInternal |
+                                 ------------------
+   \endverbatim
  *
  * The chain of interceptors is initialized when the corresponding GRPCCall2 object or proto call
  * object (GRPCUnaryProtoCall and GRPCStreamingProtoCall) is initialized. The initialization of the
@@ -70,28 +72,34 @@
  * transitions. Any event not appearing on the diagram means the event is not permitted for that
  * particular state.
  *
- *                                      writeData
- *                                  receiveNextMessages
- *                               didReceiveInitialMetadata
- *                                    didReceiveData
- *                                     didWriteData                   receiveNextmessages
- *           writeData  -----             -----                 ----  didReceiveInitialMetadata
- * receiveNextMessages |     |           |     |               |    | didReceiveData
- *                     |     V           |     V               |    V didWriteData
- *               -------------  start   ---------   finish    ------------
- *              | initialized | -----> | started | --------> | half-close |
- *               -------------          ---------             ------------
- *                     |                     |                      |
- *                     |                     | didClose             | didClose
- *                     |cancel               | cancel               | cancel
- *                     |                     V                      |
- *                     |                 ----------                 |
- *                      --------------> | finished | <--------------
- *                                       ----------
- *                                        |      ^ writeData
- *                                        |      | finish
- *                                         ------  cancel
- *                                                 receiveNextMessages
+ * \verbatim
+                                        writeData
+                                    receiveNextMessages
+                                 didReceiveInitialMetadata
+                                      didReceiveData
+                                       didWriteData                   receiveNextmessages
+             writeData  -----             -----                 ----  didReceiveInitialMetadata
+   receiveNextMessages |     |           |     |               |    | didReceiveData
+                       |     V           |     V               |    V didWriteData
+                 -------------  start   ---------   finish    ------------
+                | initialized | -----> | started | --------> | half-close |
+                 -------------          ---------             ------------
+                       |                     |                      |
+                       |                     | didClose             | didClose
+                       |cancel               | cancel               | cancel
+                       |                     V                      |
+                       |                 ----------                 |
+                        --------------> | finished | <--------------
+                                         ----------
+                                          |      ^ writeData
+                                          |      | finish
+                                           ------  cancel
+                                                   receiveNextMessages
+   \endverbatim
+ *
+ * An interceptor must forward responses to its previous interceptor in the order of initial
+ * metadata, message(s), and trailing metadata. Forwarding responses out of this order (e.g.
+ * forwarding a message before initial metadata) is not allowed.
  *
  * Events of requests and responses are dispatched to interceptor objects using the interceptor's
  * dispatch queue. The dispatch queue should be serial queue to make sure the events are processed
@@ -117,9 +125,9 @@ NS_ASSUME_NONNULL_BEGIN
 @protocol GRPCResponseHandler;
 
 /**
- * The GRPCInterceptorInterface defines the request events that can occur to an interceptr.
+ * The GRPCInterceptorInterface defines the request events that can occur to an interceptor.
  */
-@protocol GRPCInterceptorInterface<NSObject, GRPCDispatchable>
+@protocol GRPCInterceptorInterface <NSObject, GRPCDispatchable>
 
 /**
  * To start the call. This method will only be called once for each instance.
@@ -150,8 +158,8 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 /**
- * An interceptor factory object should be used to create interceptor object for the call at the
- * call start time.
+ * An interceptor factory object is used to create interceptor object for the call at the call
+ * start time.
  */
 @protocol GRPCInterceptorFactory
 
@@ -176,11 +184,11 @@ NS_ASSUME_NONNULL_BEGIN
  * When an interceptor is shutting down, it must invoke -shutDown method of its corresponding
  * manager so that references to other interceptors can be released and proper clean-up is made.
  */
-@interface GRPCInterceptorManager : NSObject<GRPCInterceptorInterface, GRPCResponseHandler>
+@interface GRPCInterceptorManager : NSObject <GRPCInterceptorInterface, GRPCResponseHandler>
 
 - (instancetype)init NS_UNAVAILABLE;
 
-+ (instancetype) new NS_UNAVAILABLE;
++ (instancetype)new NS_UNAVAILABLE;
 
 - (nullable instancetype)initWithFactories:(nullable NSArray<id<GRPCInterceptorFactory>> *)factories
                        previousInterceptor:(nullable id<GRPCResponseHandler>)previousInterceptor
@@ -238,10 +246,10 @@ NS_ASSUME_NONNULL_BEGIN
  * with [super initWithInterceptorManager:dispatchQueue:] for the default implementation to function
  * properly.
  */
-@interface GRPCInterceptor : NSObject<GRPCInterceptorInterface, GRPCResponseHandler>
+@interface GRPCInterceptor : NSObject <GRPCInterceptorInterface, GRPCResponseHandler>
 
 - (instancetype)init NS_UNAVAILABLE;
-+ (instancetype) new NS_UNAVAILABLE;
++ (instancetype)new NS_UNAVAILABLE;
 
 /**
  * Initialize the interceptor with the next interceptor in the chain, and provide the dispatch queue

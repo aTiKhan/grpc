@@ -43,7 +43,7 @@ namespace grpc {
 namespace testing {
 namespace {
 
-void* tag(int i) { return (void*)static_cast<intptr_t>(i); }
+void* tag(int i) { return reinterpret_cast<void*>(i); }
 
 bool VerifyReturnSuccess(CompletionQueue* cq, int i) {
   void* got_tag;
@@ -80,7 +80,7 @@ void HandleEcho(Service* service, ServerCompletionQueue* cq, bool dup_service) {
 // that the req/resp are ByteBuffers
 template <class Service>
 void HandleRawEcho(Service* service, ServerCompletionQueue* cq,
-                   bool dup_service) {
+                   bool /*dup_service*/) {
   ServerContext srv_ctx;
   GenericServerAsyncResponseWriter response_writer(&srv_ctx);
   ByteBuffer recv_buffer;
@@ -219,7 +219,7 @@ void HandleGenericCall(AsyncGenericService* service,
 class TestServiceImplDupPkg
     : public ::grpc::testing::duplicate::EchoTestService::Service {
  public:
-  Status Echo(ServerContext* context, const EchoRequest* request,
+  Status Echo(ServerContext* /*context*/, const EchoRequest* request,
               EchoResponse* response) override {
     response->set_message(request->message() + "_dup");
     return Status::OK;
@@ -245,11 +245,10 @@ class HybridEnd2endTest : public ::testing::TestWithParam<bool> {
                   : false;
   }
 
-  bool SetUpServer(
-      ::grpc::Service* service1, ::grpc::Service* service2,
-      AsyncGenericService* generic_service,
-      experimental::CallbackGenericService* callback_generic_service,
-      int max_message_size = 0) {
+  bool SetUpServer(::grpc::Service* service1, ::grpc::Service* service2,
+                   AsyncGenericService* generic_service,
+                   CallbackGenericService* callback_generic_service,
+                   int max_message_size = 0) {
     int port = grpc_pick_unused_port_or_die();
     server_address_ << "localhost:" << port;
 
@@ -268,8 +267,7 @@ class HybridEnd2endTest : public ::testing::TestWithParam<bool> {
       builder.RegisterAsyncGenericService(generic_service);
     }
     if (callback_generic_service) {
-      builder.experimental().RegisterCallbackGenericService(
-          callback_generic_service);
+      builder.RegisterCallbackGenericService(callback_generic_service);
     }
 
     if (max_message_size != 0) {
@@ -296,8 +294,8 @@ class HybridEnd2endTest : public ::testing::TestWithParam<bool> {
     bool ignored_ok;
     for (auto it = cqs_.begin(); it != cqs_.end(); ++it) {
       (*it)->Shutdown();
-      while ((*it)->Next(&ignored_tag, &ignored_ok))
-        ;
+      while ((*it)->Next(&ignored_tag, &ignored_ok)) {
+      }
     }
   }
 
@@ -345,7 +343,7 @@ class HybridEnd2endTest : public ::testing::TestWithParam<bool> {
   void SendSimpleClientStreaming() {
     EchoRequest send_request;
     EchoResponse recv_response;
-    grpc::string expected_message;
+    std::string expected_message;
     ClientContext cli_ctx;
     cli_ctx.set_wait_for_ready(true);
     send_request.set_message("Hello");
@@ -408,7 +406,7 @@ class HybridEnd2endTest : public ::testing::TestWithParam<bool> {
     EchoResponse response;
     ClientContext context;
     context.set_wait_for_ready(true);
-    grpc::string msg("hello");
+    std::string msg("hello");
 
     auto stream = stub_->BidiStream(&context);
 
@@ -566,7 +564,7 @@ class StreamedUnaryDupPkg
           TestServiceImplDupPkg> {
  public:
   Status StreamedEcho(
-      ServerContext* context,
+      ServerContext* /*context*/,
       ServerUnaryStreamer<EchoRequest, EchoResponse>* stream) override {
     EchoRequest req;
     EchoResponse resp;
@@ -604,7 +602,7 @@ class FullyStreamedUnaryDupPkg
     : public duplicate::EchoTestService::StreamedUnaryService {
  public:
   Status StreamedEcho(
-      ServerContext* context,
+      ServerContext* /*context*/,
       ServerUnaryStreamer<EchoRequest, EchoResponse>* stream) override {
     EchoRequest req;
     EchoResponse resp;
@@ -643,7 +641,7 @@ class SplitResponseStreamDupPkg
           WithSplitStreamingMethod_ResponseStream<TestServiceImplDupPkg> {
  public:
   Status StreamedResponseStream(
-      ServerContext* context,
+      ServerContext* /*context*/,
       ServerSplitStreamer<EchoRequest, EchoResponse>* stream) override {
     EchoRequest req;
     EchoResponse resp;
@@ -652,7 +650,7 @@ class SplitResponseStreamDupPkg
     gpr_log(GPR_INFO, "Split Streamed Next Message Size is %u", next_msg_sz);
     GPR_ASSERT(stream->Read(&req));
     for (int i = 0; i < kServerDefaultResponseStreamsToSend; i++) {
-      resp.set_message(req.message() + grpc::to_string(i) + "_dup");
+      resp.set_message(req.message() + std::to_string(i) + "_dup");
       GPR_ASSERT(stream->Write(resp));
     }
     return Status::OK;
@@ -683,7 +681,7 @@ class FullySplitStreamedDupPkg
     : public duplicate::EchoTestService::SplitStreamedService {
  public:
   Status StreamedResponseStream(
-      ServerContext* context,
+      ServerContext* /*context*/,
       ServerSplitStreamer<EchoRequest, EchoResponse>* stream) override {
     EchoRequest req;
     EchoResponse resp;
@@ -692,7 +690,7 @@ class FullySplitStreamedDupPkg
     gpr_log(GPR_INFO, "Split Streamed Next Message Size is %u", next_msg_sz);
     GPR_ASSERT(stream->Read(&req));
     for (int i = 0; i < kServerDefaultResponseStreamsToSend; i++) {
-      resp.set_message(req.message() + grpc::to_string(i) + "_dup");
+      resp.set_message(req.message() + std::to_string(i) + "_dup");
       GPR_ASSERT(stream->Write(resp));
     }
     return Status::OK;
@@ -722,7 +720,7 @@ TEST_F(HybridEnd2endTest,
 class FullyStreamedDupPkg : public duplicate::EchoTestService::StreamedService {
  public:
   Status StreamedEcho(
-      ServerContext* context,
+      ServerContext* /*context*/,
       ServerUnaryStreamer<EchoRequest, EchoResponse>* stream) override {
     EchoRequest req;
     EchoResponse resp;
@@ -735,7 +733,7 @@ class FullyStreamedDupPkg : public duplicate::EchoTestService::StreamedService {
     return Status::OK;
   }
   Status StreamedResponseStream(
-      ServerContext* context,
+      ServerContext* /*context*/,
       ServerSplitStreamer<EchoRequest, EchoResponse>* stream) override {
     EchoRequest req;
     EchoResponse resp;
@@ -744,7 +742,7 @@ class FullyStreamedDupPkg : public duplicate::EchoTestService::StreamedService {
     gpr_log(GPR_INFO, "Split Streamed Next Message Size is %u", next_msg_sz);
     GPR_ASSERT(stream->Read(&req));
     for (int i = 0; i < kServerDefaultResponseStreamsToSend; i++) {
-      resp.set_message(req.message() + grpc::to_string(i) + "_dup");
+      resp.set_message(req.message() + std::to_string(i) + "_dup");
       GPR_ASSERT(stream->Write(resp));
     }
     return Status::OK;
@@ -807,16 +805,19 @@ TEST_F(HybridEnd2endTest, GenericEcho) {
 
 TEST_P(HybridEnd2endTest, CallbackGenericEcho) {
   EchoTestService::WithGenericMethod_Echo<TestServiceImpl> service;
-  class GenericEchoService : public experimental::CallbackGenericService {
+  class GenericEchoService : public CallbackGenericService {
    private:
-    experimental::ServerGenericBidiReactor* CreateReactor() override {
-      class Reactor : public experimental::ServerGenericBidiReactor {
+    ServerGenericBidiReactor* CreateReactor(
+        GenericCallbackServerContext* context) override {
+      EXPECT_EQ(context->method(), "/grpc.testing.EchoTestService/Echo");
+      gpr_log(GPR_DEBUG, "Constructor of generic service %d",
+              static_cast<int>(context->deadline().time_since_epoch().count()));
+
+      class Reactor : public ServerGenericBidiReactor {
+       public:
+        Reactor() { StartRead(&request_); }
+
        private:
-        void OnStarted(GenericServerContext* ctx) override {
-          ctx_ = ctx;
-          EXPECT_EQ(ctx->method(), "/grpc.testing.EchoTestService/Echo");
-          StartRead(&request_);
-        }
         void OnDone() override { delete this; }
         void OnReadDone(bool ok) override {
           if (!ok) {
@@ -832,7 +833,6 @@ TEST_P(HybridEnd2endTest, CallbackGenericEcho) {
           Finish(ok ? Status::OK
                     : Status(StatusCode::UNKNOWN, "Unexpected failure"));
         }
-        GenericServerContext* ctx_;
         ByteBuffer request_;
         ByteBuffer response_;
         std::atomic_int reads_complete_{0};

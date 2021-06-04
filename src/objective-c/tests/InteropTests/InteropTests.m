@@ -38,7 +38,9 @@
 #import "InteropTestsBlockCallbacks.h"
 
 #define TEST_TIMEOUT 32
+#define STREAMING_CALL_TEST_TIMEOUT 64
 
+static const int kTestRetries = 3;
 extern const char *kCFStreamVarName;
 
 // Convenience constructors for the generated proto messages:
@@ -77,7 +79,7 @@ BOOL isRemoteInteropTest(NSString *host) {
   return [host isEqualToString:@"grpc-test.sandbox.googleapis.com"];
 }
 
-@interface DefaultInterceptorFactory : NSObject<GRPCInterceptorFactory>
+@interface DefaultInterceptorFactory : NSObject <GRPCInterceptorFactory>
 
 - (GRPCInterceptor *)createInterceptorWithManager:(GRPCInterceptorManager *)interceptorManager;
 
@@ -87,28 +89,29 @@ BOOL isRemoteInteropTest(NSString *host) {
 
 - (GRPCInterceptor *)createInterceptorWithManager:(GRPCInterceptorManager *)interceptorManager {
   dispatch_queue_t queue = dispatch_queue_create(NULL, DISPATCH_QUEUE_SERIAL);
-  return
-      [[GRPCInterceptor alloc] initWithInterceptorManager:interceptorManager dispatchQueue:queue];
+  return [[GRPCInterceptor alloc] initWithInterceptorManager:interceptorManager
+                                               dispatchQueue:queue];
 }
 
 @end
 
-@interface HookInterceptorFactory : NSObject<GRPCInterceptorFactory>
+@interface HookInterceptorFactory : NSObject <GRPCInterceptorFactory>
 
 - (instancetype)
-  initWithDispatchQueue:(dispatch_queue_t)dispatchQueue
-              startHook:(void (^)(GRPCRequestOptions *requestOptions, GRPCCallOptions *callOptions,
-                                  GRPCInterceptorManager *manager))startHook
-          writeDataHook:(void (^)(id data, GRPCInterceptorManager *manager))writeDataHook
-             finishHook:(void (^)(GRPCInterceptorManager *manager))finishHook
-receiveNextMessagesHook:(void (^)(NSUInteger numberOfMessages,
-                                  GRPCInterceptorManager *manager))receiveNextMessagesHook
-     responseHeaderHook:(void (^)(NSDictionary *initialMetadata,
-                                  GRPCInterceptorManager *manager))responseHeaderHook
-       responseDataHook:(void (^)(id data, GRPCInterceptorManager *manager))responseDataHook
-      responseCloseHook:(void (^)(NSDictionary *trailingMetadata, NSError *error,
-                                  GRPCInterceptorManager *manager))responseCloseHook
-       didWriteDataHook:(void (^)(GRPCInterceptorManager *manager))didWriteDataHook;
+      initWithDispatchQueue:(dispatch_queue_t)dispatchQueue
+                  startHook:(void (^)(GRPCRequestOptions *requestOptions,
+                                      GRPCCallOptions *callOptions,
+                                      GRPCInterceptorManager *manager))startHook
+              writeDataHook:(void (^)(id data, GRPCInterceptorManager *manager))writeDataHook
+                 finishHook:(void (^)(GRPCInterceptorManager *manager))finishHook
+    receiveNextMessagesHook:(void (^)(NSUInteger numberOfMessages,
+                                      GRPCInterceptorManager *manager))receiveNextMessagesHook
+         responseHeaderHook:(void (^)(NSDictionary *initialMetadata,
+                                      GRPCInterceptorManager *manager))responseHeaderHook
+           responseDataHook:(void (^)(id data, GRPCInterceptorManager *manager))responseDataHook
+          responseCloseHook:(void (^)(NSDictionary *trailingMetadata, NSError *error,
+                                      GRPCInterceptorManager *manager))responseCloseHook
+           didWriteDataHook:(void (^)(GRPCInterceptorManager *manager))didWriteDataHook;
 
 - (GRPCInterceptor *)createInterceptorWithManager:(GRPCInterceptorManager *)interceptorManager;
 
@@ -117,21 +120,21 @@ receiveNextMessagesHook:(void (^)(NSUInteger numberOfMessages,
 @interface HookInterceptor : GRPCInterceptor
 
 - (instancetype)
-initWithInterceptorManager:(GRPCInterceptorManager *)interceptorManager
-             dispatchQueue:(dispatch_queue_t)dispatchQueue
-                 startHook:(void (^)(GRPCRequestOptions *requestOptions,
-                                     GRPCCallOptions *callOptions,
-                                     GRPCInterceptorManager *manager))startHook
-             writeDataHook:(void (^)(id data, GRPCInterceptorManager *manager))writeDataHook
-                finishHook:(void (^)(GRPCInterceptorManager *manager))finishHook
-   receiveNextMessagesHook:(void (^)(NSUInteger numberOfMessages,
-                                     GRPCInterceptorManager *manager))receiveNextMessagesHook
-        responseHeaderHook:(void (^)(NSDictionary *initialMetadata,
-                                     GRPCInterceptorManager *manager))responseHeaderHook
-          responseDataHook:(void (^)(id data, GRPCInterceptorManager *manager))responseDataHook
-         responseCloseHook:(void (^)(NSDictionary *trailingMetadata, NSError *error,
-                                     GRPCInterceptorManager *manager))responseCloseHook
-          didWriteDataHook:(void (^)(GRPCInterceptorManager *manager))didWriteDataHook;
+    initWithInterceptorManager:(GRPCInterceptorManager *)interceptorManager
+                 dispatchQueue:(dispatch_queue_t)dispatchQueue
+                     startHook:(void (^)(GRPCRequestOptions *requestOptions,
+                                         GRPCCallOptions *callOptions,
+                                         GRPCInterceptorManager *manager))startHook
+                 writeDataHook:(void (^)(id data, GRPCInterceptorManager *manager))writeDataHook
+                    finishHook:(void (^)(GRPCInterceptorManager *manager))finishHook
+       receiveNextMessagesHook:(void (^)(NSUInteger numberOfMessages,
+                                         GRPCInterceptorManager *manager))receiveNextMessagesHook
+            responseHeaderHook:(void (^)(NSDictionary *initialMetadata,
+                                         GRPCInterceptorManager *manager))responseHeaderHook
+              responseDataHook:(void (^)(id data, GRPCInterceptorManager *manager))responseDataHook
+             responseCloseHook:(void (^)(NSDictionary *trailingMetadata, NSError *error,
+                                         GRPCInterceptorManager *manager))responseCloseHook
+              didWriteDataHook:(void (^)(GRPCInterceptorManager *manager))didWriteDataHook;
 
 @end
 
@@ -151,19 +154,20 @@ initWithInterceptorManager:(GRPCInterceptorManager *)interceptorManager
 }
 
 - (instancetype)
-  initWithDispatchQueue:(dispatch_queue_t)dispatchQueue
-              startHook:(void (^)(GRPCRequestOptions *requestOptions, GRPCCallOptions *callOptions,
-                                  GRPCInterceptorManager *manager))startHook
-          writeDataHook:(void (^)(id data, GRPCInterceptorManager *manager))writeDataHook
-             finishHook:(void (^)(GRPCInterceptorManager *manager))finishHook
-receiveNextMessagesHook:(void (^)(NSUInteger numberOfMessages,
-                                  GRPCInterceptorManager *manager))receiveNextMessagesHook
-     responseHeaderHook:(void (^)(NSDictionary *initialMetadata,
-                                  GRPCInterceptorManager *manager))responseHeaderHook
-       responseDataHook:(void (^)(id data, GRPCInterceptorManager *manager))responseDataHook
-      responseCloseHook:(void (^)(NSDictionary *trailingMetadata, NSError *error,
-                                  GRPCInterceptorManager *manager))responseCloseHook
-       didWriteDataHook:(void (^)(GRPCInterceptorManager *manager))didWriteDataHook {
+      initWithDispatchQueue:(dispatch_queue_t)dispatchQueue
+                  startHook:(void (^)(GRPCRequestOptions *requestOptions,
+                                      GRPCCallOptions *callOptions,
+                                      GRPCInterceptorManager *manager))startHook
+              writeDataHook:(void (^)(id data, GRPCInterceptorManager *manager))writeDataHook
+                 finishHook:(void (^)(GRPCInterceptorManager *manager))finishHook
+    receiveNextMessagesHook:(void (^)(NSUInteger numberOfMessages,
+                                      GRPCInterceptorManager *manager))receiveNextMessagesHook
+         responseHeaderHook:(void (^)(NSDictionary *initialMetadata,
+                                      GRPCInterceptorManager *manager))responseHeaderHook
+           responseDataHook:(void (^)(id data, GRPCInterceptorManager *manager))responseDataHook
+          responseCloseHook:(void (^)(NSDictionary *trailingMetadata, NSError *error,
+                                      GRPCInterceptorManager *manager))responseCloseHook
+           didWriteDataHook:(void (^)(GRPCInterceptorManager *manager))didWriteDataHook {
   if ((self = [super init])) {
     _dispatchQueue = dispatchQueue;
     _startHook = startHook;
@@ -213,21 +217,21 @@ receiveNextMessagesHook:(void (^)(NSUInteger numberOfMessages,
 }
 
 - (instancetype)
-initWithInterceptorManager:(GRPCInterceptorManager *)interceptorManager
-             dispatchQueue:(dispatch_queue_t)dispatchQueue
-                 startHook:(void (^)(GRPCRequestOptions *requestOptions,
-                                     GRPCCallOptions *callOptions,
-                                     GRPCInterceptorManager *manager))startHook
-             writeDataHook:(void (^)(id data, GRPCInterceptorManager *manager))writeDataHook
-                finishHook:(void (^)(GRPCInterceptorManager *manager))finishHook
-   receiveNextMessagesHook:(void (^)(NSUInteger numberOfMessages,
-                                     GRPCInterceptorManager *manager))receiveNextMessagesHook
-        responseHeaderHook:(void (^)(NSDictionary *initialMetadata,
-                                     GRPCInterceptorManager *manager))responseHeaderHook
-          responseDataHook:(void (^)(id data, GRPCInterceptorManager *manager))responseDataHook
-         responseCloseHook:(void (^)(NSDictionary *trailingMetadata, NSError *error,
-                                     GRPCInterceptorManager *manager))responseCloseHook
-          didWriteDataHook:(void (^)(GRPCInterceptorManager *manager))didWriteDataHook {
+    initWithInterceptorManager:(GRPCInterceptorManager *)interceptorManager
+                 dispatchQueue:(dispatch_queue_t)dispatchQueue
+                     startHook:(void (^)(GRPCRequestOptions *requestOptions,
+                                         GRPCCallOptions *callOptions,
+                                         GRPCInterceptorManager *manager))startHook
+                 writeDataHook:(void (^)(id data, GRPCInterceptorManager *manager))writeDataHook
+                    finishHook:(void (^)(GRPCInterceptorManager *manager))finishHook
+       receiveNextMessagesHook:(void (^)(NSUInteger numberOfMessages,
+                                         GRPCInterceptorManager *manager))receiveNextMessagesHook
+            responseHeaderHook:(void (^)(NSDictionary *initialMetadata,
+                                         GRPCInterceptorManager *manager))responseHeaderHook
+              responseDataHook:(void (^)(id data, GRPCInterceptorManager *manager))responseDataHook
+             responseCloseHook:(void (^)(NSDictionary *trailingMetadata, NSError *error,
+                                         GRPCInterceptorManager *manager))responseCloseHook
+              didWriteDataHook:(void (^)(GRPCInterceptorManager *manager))didWriteDataHook {
   if ((self = [super initWithInterceptorManager:interceptorManager dispatchQueue:dispatchQueue])) {
     _startHook = startHook;
     _writeDataHook = writeDataHook;
@@ -379,6 +383,36 @@ static dispatch_once_t initGlobalInterceptorFactory;
 @implementation InteropTests {
   RMTTestService *_service;
 }
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+- (void)retriableTest:(SEL)selector retries:(int)retries timeout:(NSTimeInterval)timeout {
+  for (int i = 0; i < retries; i++) {
+    NSDate *waitUntil = [[NSDate date] dateByAddingTimeInterval:timeout];
+    NSCondition *cv = [[NSCondition alloc] init];
+    __block BOOL done = NO;
+    [cv lock];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+      [self performSelector:selector];
+      [cv lock];
+      done = YES;
+      [cv signal];
+      [cv unlock];
+    });
+    while (!done && [waitUntil timeIntervalSinceNow] > 0) {
+      [cv waitUntilDate:waitUntil];
+    }
+    if (done) {
+      [cv unlock];
+      break;
+    } else {
+      [cv unlock];
+      [self tearDown];
+      [self setUp];
+    }
+  }
+}
+#pragma clang diagnostic pop
 
 + (XCTestSuite *)defaultTestSuite {
   if (self == [InteropTests class]) {
@@ -563,6 +597,66 @@ static dispatch_once_t initGlobalInterceptorFactory;
   [self waitForExpectationsWithTimeout:TEST_TIMEOUT handler:nil];
 }
 
+- (void)testUnaryResponseHandler {
+  XCTAssertNotNil([[self class] host]);
+  // The test does not work on a remote server since it does not echo a trailer
+  if ([[self class] isRemoteTest]) return;
+  XCTestExpectation *expectComplete = [self expectationWithDescription:@"call complete"];
+  XCTestExpectation *expectCompleteMainQueue =
+      [self expectationWithDescription:@"main queue call complete"];
+
+  RMTSimpleRequest *request = [RMTSimpleRequest message];
+  request.responseType = RMTPayloadType_Compressable;
+  request.responseSize = 314159;
+  request.payload.body = [NSMutableData dataWithLength:271828];
+
+  GRPCMutableCallOptions *options = [[GRPCMutableCallOptions alloc] init];
+  // For backwards compatibility
+  options.transportType = [[self class] transportType];
+  options.transport = [[self class] transport];
+  options.PEMRootCertificates = [[self class] PEMRootCertificates];
+  options.hostNameOverride = [[self class] hostNameOverride];
+  const unsigned char raw_bytes[] = {1, 2, 3, 4};
+  NSData *trailer_data = [NSData dataWithBytes:raw_bytes length:sizeof(raw_bytes)];
+  options.initialMetadata = @{
+    @"x-grpc-test-echo-trailing-bin" : trailer_data,
+    @"x-grpc-test-echo-initial" : @"test-header"
+  };
+
+  __block GRPCUnaryResponseHandler *handler = [[GRPCUnaryResponseHandler alloc]
+      initWithResponseHandler:^(GPBMessage *response, NSError *error) {
+        XCTAssertNil(error, @"Unexpected error: %@", error);
+        RMTSimpleResponse *expectedResponse = [RMTSimpleResponse message];
+        expectedResponse.payload.type = RMTPayloadType_Compressable;
+        expectedResponse.payload.body = [NSMutableData dataWithLength:314159];
+        XCTAssertEqualObjects(response, expectedResponse);
+        XCTAssertEqualObjects(handler.responseHeaders[@"x-grpc-test-echo-initial"], @"test-header");
+        XCTAssertEqualObjects(handler.responseTrailers[@"x-grpc-test-echo-trailing-bin"],
+                              trailer_data);
+        [expectComplete fulfill];
+      }
+        responseDispatchQueue:dispatch_queue_create(NULL, DISPATCH_QUEUE_SERIAL)];
+  __block GRPCUnaryResponseHandler *handlerMainQueue = [[GRPCUnaryResponseHandler alloc]
+      initWithResponseHandler:^(GPBMessage *response, NSError *error) {
+        XCTAssertNil(error, @"Unexpected error: %@", error);
+        RMTSimpleResponse *expectedResponse = [RMTSimpleResponse message];
+        expectedResponse.payload.type = RMTPayloadType_Compressable;
+        expectedResponse.payload.body = [NSMutableData dataWithLength:314159];
+        XCTAssertEqualObjects(response, expectedResponse);
+        XCTAssertEqualObjects(handlerMainQueue.responseHeaders[@"x-grpc-test-echo-initial"],
+                              @"test-header");
+        XCTAssertEqualObjects(handlerMainQueue.responseTrailers[@"x-grpc-test-echo-trailing-bin"],
+                              trailer_data);
+        [expectCompleteMainQueue fulfill];
+      }
+        responseDispatchQueue:nil];
+
+  [[_service unaryCallWithMessage:request responseHandler:handler callOptions:options] start];
+  [[_service unaryCallWithMessage:request responseHandler:handlerMainQueue
+                      callOptions:options] start];
+  [self waitForExpectationsWithTimeout:TEST_TIMEOUT handler:nil];
+}
+
 - (void)testLargeUnaryRPCWithV2API {
   XCTAssertNotNil([[self class] host]);
   __weak XCTestExpectation *expectReceive =
@@ -656,17 +750,16 @@ static dispatch_once_t initGlobalInterceptorFactory;
     GRPCUnaryProtoCall *call = calls[i];
     [call start];
   }
-  [self waitForExpectationsWithTimeout:TEST_TIMEOUT handler:nil];
+  [self waitForExpectationsWithTimeout:STREAMING_CALL_TEST_TIMEOUT handler:nil];
 }
 
-- (void)testConcurrentRPCsWithErrors {
-  NSMutableArray *completeExpectations = [NSMutableArray array];
-  int num_rpcs = 10;
-  for (int i = 0; i < num_rpcs; ++i) {
-    [completeExpectations
-        addObject:[self expectationWithDescription:
-                            [NSString stringWithFormat:@"Received trailer for RPC %d", i]]];
-
+- (void)concurrentRPCsWithErrors {
+  const int kNumRpcs = 10;
+  __block int completedCallCount = 0;
+  NSCondition *cv = [[NSCondition alloc] init];
+  NSDate *waitUntil = [[NSDate date] dateByAddingTimeInterval:TEST_TIMEOUT];
+  [cv lock];
+  for (int i = 0; i < kNumRpcs; ++i) {
     RMTSimpleRequest *request = [RMTSimpleRequest message];
     request.responseType = RMTPayloadType_Compressable;
     request.responseSize = 314159;
@@ -677,20 +770,33 @@ static dispatch_once_t initGlobalInterceptorFactory;
       request.responseStatus.code = GRPC_STATUS_CANCELLED;
     }
 
-    [_service unaryCallWithRequest:request
-                           handler:^(RMTSimpleResponse *response, NSError *error) {
-                             if (error == nil) {
-                               RMTSimpleResponse *expectedResponse = [RMTSimpleResponse message];
-                               expectedResponse.payload.type = RMTPayloadType_Compressable;
-                               expectedResponse.payload.body =
-                                   [NSMutableData dataWithLength:314159];
-                               XCTAssertEqualObjects(response, expectedResponse);
-                             }
-                             [completeExpectations[i] fulfill];
-                           }];
+    GRPCProtoCall *call = [_service
+        RPCToUnaryCallWithRequest:request
+                          handler:^(RMTSimpleResponse *response, NSError *error) {
+                            if (error == nil) {
+                              RMTSimpleResponse *expectedResponse = [RMTSimpleResponse message];
+                              expectedResponse.payload.type = RMTPayloadType_Compressable;
+                              expectedResponse.payload.body = [NSMutableData dataWithLength:314159];
+                              XCTAssertEqualObjects(response, expectedResponse);
+                            }
+                            // DEBUG
+                            [cv lock];
+                            if (++completedCallCount == kNumRpcs) {
+                              [cv signal];
+                            }
+                            [cv unlock];
+                          }];
+    [call setResponseDispatchQueue:dispatch_queue_create(NULL, DISPATCH_QUEUE_SERIAL)];
+    [call start];
   }
+  while (completedCallCount<kNumRpcs && [waitUntil timeIntervalSinceNow]> 0) {
+    [cv waitUntilDate:waitUntil];
+  }
+  [cv unlock];
+}
 
-  [self waitForExpectationsWithTimeout:TEST_TIMEOUT handler:nil];
+- (void)testConcurrentRPCsWithErrors {
+  [self retriableTest:@selector(concurrentRPCsWithErrors) retries:kTestRetries timeout:10];
 }
 
 - (void)testPacketCoalescing {
@@ -829,7 +935,7 @@ static dispatch_once_t initGlobalInterceptorFactory;
                                            [expectation fulfill];
                                          }];
 
-  [self waitForExpectationsWithTimeout:TEST_TIMEOUT handler:nil];
+  [self waitForExpectationsWithTimeout:STREAMING_CALL_TEST_TIMEOUT handler:nil];
 }
 
 - (void)testServerStreamingRPC {
@@ -868,7 +974,7 @@ static dispatch_once_t initGlobalInterceptorFactory;
                           }
                         }];
 
-  [self waitForExpectationsWithTimeout:TEST_TIMEOUT handler:nil];
+  [self waitForExpectationsWithTimeout:STREAMING_CALL_TEST_TIMEOUT handler:nil];
 }
 
 - (void)testPingPongRPC {
@@ -915,7 +1021,7 @@ static dispatch_once_t initGlobalInterceptorFactory;
                                     [expectation fulfill];
                                   }
                                 }];
-  [self waitForExpectationsWithTimeout:TEST_TIMEOUT handler:nil];
+  [self waitForExpectationsWithTimeout:STREAMING_CALL_TEST_TIMEOUT handler:nil];
 }
 
 - (void)testPingPongRPCWithV2API {
@@ -969,7 +1075,7 @@ static dispatch_once_t initGlobalInterceptorFactory;
   [call start];
   [call writeMessage:request];
 
-  [self waitForExpectationsWithTimeout:TEST_TIMEOUT handler:nil];
+  [self waitForExpectationsWithTimeout:STREAMING_CALL_TEST_TIMEOUT handler:nil];
 }
 
 - (void)testPingPongRPCWithFlowControl {
@@ -990,7 +1096,7 @@ static dispatch_once_t initGlobalInterceptorFactory;
   options.PEMRootCertificates = [[self class] PEMRootCertificates];
   options.hostNameOverride = [[self class] hostNameOverride];
   options.flowControlEnabled = YES;
-  __block BOOL canWriteData = NO;
+  __block int writeMessageCount = 0;
 
   __block GRPCStreamingProtoCall *call = [_service
       fullDuplexCallWithResponseHandler:[[InteropTestsBlockCallbacks alloc]
@@ -1006,8 +1112,9 @@ static dispatch_once_t initGlobalInterceptorFactory;
                                                 id request = [RMTStreamingOutputCallRequest
                                                     messageWithPayloadSize:requests[index]
                                                      requestedResponseSize:responses[index]];
-                                                XCTAssertTrue(canWriteData);
-                                                canWriteData = NO;
+                                                XCTAssertLessThanOrEqual(
+                                                    index, writeMessageCount,
+                                                    @"Message received before writing message.");
                                                 [call writeMessage:request];
                                                 [call receiveNextMessage];
                                               } else {
@@ -1025,14 +1132,14 @@ static dispatch_once_t initGlobalInterceptorFactory;
                                               [expectation fulfill];
                                             }
                                             writeMessageCallback:^{
-                                              canWriteData = YES;
+                                              writeMessageCount++;
                                             }]
                             callOptions:options];
   [call start];
   [call receiveNextMessage];
   [call writeMessage:request];
 
-  [self waitForExpectationsWithTimeout:TEST_TIMEOUT handler:nil];
+  [self waitForExpectationsWithTimeout:STREAMING_CALL_TEST_TIMEOUT handler:nil];
 }
 
 - (void)testEmptyStreamRPC {
@@ -1107,8 +1214,8 @@ static dispatch_once_t initGlobalInterceptorFactory;
 
   __block BOOL receivedResponse = NO;
 
-  id request =
-      [RMTStreamingOutputCallRequest messageWithPayloadSize:@21782 requestedResponseSize:@31415];
+  id request = [RMTStreamingOutputCallRequest messageWithPayloadSize:@21782
+                                               requestedResponseSize:@31415];
 
   [requestsBuffer writeValue:request];
 
@@ -1149,8 +1256,8 @@ static dispatch_once_t initGlobalInterceptorFactory;
   options.PEMRootCertificates = self.class.PEMRootCertificates;
   options.hostNameOverride = [[self class] hostNameOverride];
 
-  id request =
-      [RMTStreamingOutputCallRequest messageWithPayloadSize:@21782 requestedResponseSize:@31415];
+  id request = [RMTStreamingOutputCallRequest messageWithPayloadSize:@21782
+                                               requestedResponseSize:@31415];
 
   __block GRPCStreamingProtoCall *call = [_service
       fullDuplexCallWithResponseHandler:[[InteropTestsBlockCallbacks alloc]
@@ -1184,8 +1291,8 @@ static dispatch_once_t initGlobalInterceptorFactory;
   options.PEMRootCertificates = self.class.PEMRootCertificates;
   options.hostNameOverride = [[self class] hostNameOverride];
 
-  id request =
-      [RMTStreamingOutputCallRequest messageWithPayloadSize:@21782 requestedResponseSize:@31415];
+  id request = [RMTStreamingOutputCallRequest messageWithPayloadSize:@21782
+                                               requestedResponseSize:@31415];
 
   __block GRPCStreamingProtoCall *call = [_service
       fullDuplexCallWithResponseHandler:[[InteropTestsBlockCallbacks alloc]
@@ -1232,7 +1339,7 @@ static dispatch_once_t initGlobalInterceptorFactory;
                                       }];
                    }];
 
-  [self waitForExpectationsWithTimeout:TEST_TIMEOUT handler:nil];
+  [self waitForExpectationsWithTimeout:STREAMING_CALL_TEST_TIMEOUT handler:nil];
 }
 
 - (void)testCompressedUnaryRPC {
@@ -1361,7 +1468,7 @@ static dispatch_once_t initGlobalInterceptorFactory;
   [call start];
   [call writeMessage:request];
 
-  [self waitForExpectationsWithTimeout:TEST_TIMEOUT handler:nil];
+  [self waitForExpectationsWithTimeout:STREAMING_CALL_TEST_TIMEOUT handler:nil];
 }
 
 - (void)testLoggingInterceptor {
@@ -1421,10 +1528,10 @@ static dispatch_once_t initGlobalInterceptorFactory;
   NSArray *requests = @[ @1, @2, @3, @4 ];
   NSArray *responses = @[ @1, @2, @3, @4 ];
 
-  __block int index = 0;
+  __block int messageIndex = 0;
 
-  id request = [RMTStreamingOutputCallRequest messageWithPayloadSize:requests[index]
-                                               requestedResponseSize:responses[index]];
+  id request = [RMTStreamingOutputCallRequest messageWithPayloadSize:requests[messageIndex]
+                                               requestedResponseSize:responses[messageIndex]];
   GRPCMutableCallOptions *options = [[GRPCMutableCallOptions alloc] init];
   // For backwards compatibility
   options.transportType = [[self class] transportType];
@@ -1433,24 +1540,26 @@ static dispatch_once_t initGlobalInterceptorFactory;
   options.hostNameOverride = [[self class] hostNameOverride];
   options.flowControlEnabled = YES;
   options.interceptorFactories = @[ factory ];
-  __block BOOL canWriteData = NO;
+
+  __block int writeMessageCount = 0;
 
   __block GRPCStreamingProtoCall *call = [_service
       fullDuplexCallWithResponseHandler:[[InteropTestsBlockCallbacks alloc]
                                             initWithInitialMetadataCallback:nil
                                             messageCallback:^(id message) {
-                                              XCTAssertLessThan(index, 4,
+                                              XCTAssertLessThan(messageIndex, 4,
                                                                 @"More than 4 responses received.");
                                               id expected = [RMTStreamingOutputCallResponse
-                                                  messageWithPayloadSize:responses[index]];
+                                                  messageWithPayloadSize:responses[messageIndex]];
                                               XCTAssertEqualObjects(message, expected);
-                                              index += 1;
-                                              if (index < 4) {
+                                              messageIndex += 1;
+                                              if (messageIndex < 4) {
                                                 id request = [RMTStreamingOutputCallRequest
-                                                    messageWithPayloadSize:requests[index]
-                                                     requestedResponseSize:responses[index]];
-                                                XCTAssertTrue(canWriteData);
-                                                canWriteData = NO;
+                                                    messageWithPayloadSize:requests[messageIndex]
+                                                     requestedResponseSize:responses[messageIndex]];
+                                                XCTAssertLessThanOrEqual(
+                                                    messageIndex, writeMessageCount,
+                                                    @"Message received before writing message.");
                                                 [call writeMessage:request];
                                                 [call receiveNextMessage];
                                               } else {
@@ -1462,13 +1571,13 @@ static dispatch_once_t initGlobalInterceptorFactory;
                                               XCTAssertNil(error,
                                                            @"Finished with unexpected error: %@",
                                                            error);
-                                              XCTAssertEqual(index, 4,
+                                              XCTAssertEqual(messageIndex, 4,
                                                              @"Received %i responses instead of 4.",
-                                                             index);
+                                                             messageIndex);
                                               [expectation fulfill];
                                             }
                                             writeMessageCallback:^{
-                                              canWriteData = YES;
+                                              writeMessageCount++;
                                             }]
                             callOptions:options];
   [call start];
@@ -1476,6 +1585,7 @@ static dispatch_once_t initGlobalInterceptorFactory;
   [call writeMessage:request];
 
   [self waitForExpectationsWithTimeout:TEST_TIMEOUT handler:nil];
+  XCTAssertEqual(writeMessageCount, 4);
   XCTAssertEqual(startCount, 1);
   XCTAssertEqual(writeDataCount, 4);
   XCTAssertEqual(finishCount, 1);
@@ -1486,15 +1596,13 @@ static dispatch_once_t initGlobalInterceptorFactory;
   XCTAssertEqual(didWriteDataCount, 4);
 }
 
-// Chain a default interceptor and a hook interceptor which, after two writes, cancels the call
+// Chain a default interceptor and a hook interceptor which, after one write, cancels the call
 // under the hood but forward further data to the user.
 - (void)testHijackingInterceptor {
-  NSUInteger kCancelAfterWrites = 2;
+  NSUInteger kCancelAfterWrites = 1;
   XCTAssertNotNil([[self class] host]);
   __weak XCTestExpectation *expectUserCallComplete =
       [self expectationWithDescription:@"User call completed."];
-  __weak XCTestExpectation *expectCallInternalComplete =
-      [self expectationWithDescription:@"Internal gRPC call completed."];
 
   NSArray *responses = @[ @1, @2, @3, @4 ];
   __block int index = 0;
@@ -1551,7 +1659,6 @@ static dispatch_once_t initGlobalInterceptorFactory;
         XCTAssertNil(trailingMetadata);
         XCTAssertNotNil(error);
         XCTAssertEqual(error.code, GRPC_STATUS_CANCELLED);
-        [expectCallInternalComplete fulfill];
       }
       didWriteDataHook:nil];
 
@@ -1602,12 +1709,12 @@ static dispatch_once_t initGlobalInterceptorFactory;
   [call receiveNextMessage];
   [call writeMessage:request];
 
-  [self waitForExpectationsWithTimeout:TEST_TIMEOUT handler:nil];
+  [self waitForExpectationsWithTimeout:STREAMING_CALL_TEST_TIMEOUT handler:nil];
   XCTAssertEqual(startCount, 1);
   XCTAssertEqual(writeDataCount, 4);
   XCTAssertEqual(finishCount, 1);
   XCTAssertEqual(responseHeaderCount, 1);
-  XCTAssertEqual(responseDataCount, 2);
+  XCTAssertEqual(responseDataCount, 1);
   XCTAssertEqual(responseCloseCount, 1);
 }
 
@@ -1624,15 +1731,16 @@ static dispatch_once_t initGlobalInterceptorFactory;
   __block NSUInteger responseDataCount = 0;
   __block NSUInteger responseCloseCount = 0;
   __block NSUInteger didWriteDataCount = 0;
-  [globalInterceptorFactory setStartHook:^(GRPCRequestOptions *requestOptions,
-                                           GRPCCallOptions *callOptions,
-                                           GRPCInterceptorManager *manager) {
-    startCount++;
-    XCTAssertEqualObjects(requestOptions.host, [[self class] host]);
-    XCTAssertEqualObjects(requestOptions.path, @"/grpc.testing.TestService/FullDuplexCall");
-    XCTAssertEqual(requestOptions.safety, GRPCCallSafetyDefault);
-    [manager startNextInterceptorWithRequest:[requestOptions copy] callOptions:[callOptions copy]];
-  }
+  [globalInterceptorFactory
+      setStartHook:^(GRPCRequestOptions *requestOptions, GRPCCallOptions *callOptions,
+                     GRPCInterceptorManager *manager) {
+        startCount++;
+        XCTAssertEqualObjects(requestOptions.host, [[self class] host]);
+        XCTAssertEqualObjects(requestOptions.path, @"/grpc.testing.TestService/FullDuplexCall");
+        XCTAssertEqual(requestOptions.safety, GRPCCallSafetyDefault);
+        [manager startNextInterceptorWithRequest:[requestOptions copy]
+                                     callOptions:[callOptions copy]];
+      }
       writeDataHook:^(id data, GRPCInterceptorManager *manager) {
         writeDataCount++;
         [manager writeNextInterceptorWithData:data];
@@ -1679,7 +1787,7 @@ static dispatch_once_t initGlobalInterceptorFactory;
   options.flowControlEnabled = YES;
   globalInterceptorFactory.enabled = YES;
 
-  __block BOOL canWriteData = NO;
+  __block int writeMessageCount = 0;
   __block GRPCStreamingProtoCall *call = [_service
       fullDuplexCallWithResponseHandler:[[InteropTestsBlockCallbacks alloc]
                                             initWithInitialMetadataCallback:nil
@@ -1691,8 +1799,9 @@ static dispatch_once_t initGlobalInterceptorFactory;
                                                 id request = [RMTStreamingOutputCallRequest
                                                     messageWithPayloadSize:requests[index]
                                                      requestedResponseSize:responses[index]];
-                                                XCTAssertTrue(canWriteData);
-                                                canWriteData = NO;
+                                                XCTAssertLessThanOrEqual(
+                                                    index, writeMessageCount,
+                                                    @"Message received before writing message.");
                                                 [call writeMessage:request];
                                                 [call receiveNextMessage];
                                               } else {
@@ -1707,14 +1816,14 @@ static dispatch_once_t initGlobalInterceptorFactory;
                                               [expectation fulfill];
                                             }
                                             writeMessageCallback:^{
-                                              canWriteData = YES;
+                                              writeMessageCount++;
                                             }]
                             callOptions:options];
   [call start];
   [call receiveNextMessage];
   [call writeMessage:request];
 
-  [self waitForExpectationsWithTimeout:TEST_TIMEOUT handler:nil];
+  [self waitForExpectationsWithTimeout:STREAMING_CALL_TEST_TIMEOUT handler:nil];
   XCTAssertEqual(startCount, 1);
   XCTAssertEqual(writeDataCount, 4);
   XCTAssertEqual(finishCount, 1);
@@ -1809,15 +1918,16 @@ static dispatch_once_t initGlobalInterceptorFactory;
   __block NSUInteger globalResponseCloseCount = 0;
   __block NSUInteger globalDidWriteDataCount = 0;
 
-  [globalInterceptorFactory setStartHook:^(GRPCRequestOptions *requestOptions,
-                                           GRPCCallOptions *callOptions,
-                                           GRPCInterceptorManager *manager) {
-    globalStartCount++;
-    XCTAssertEqualObjects(requestOptions.host, [[self class] host]);
-    XCTAssertEqualObjects(requestOptions.path, @"/grpc.testing.TestService/FullDuplexCall");
-    XCTAssertEqual(requestOptions.safety, GRPCCallSafetyDefault);
-    [manager startNextInterceptorWithRequest:[requestOptions copy] callOptions:[callOptions copy]];
-  }
+  [globalInterceptorFactory
+      setStartHook:^(GRPCRequestOptions *requestOptions, GRPCCallOptions *callOptions,
+                     GRPCInterceptorManager *manager) {
+        globalStartCount++;
+        XCTAssertEqualObjects(requestOptions.host, [[self class] host]);
+        XCTAssertEqualObjects(requestOptions.path, @"/grpc.testing.TestService/FullDuplexCall");
+        XCTAssertEqual(requestOptions.safety, GRPCCallSafetyDefault);
+        [manager startNextInterceptorWithRequest:[requestOptions copy]
+                                     callOptions:[callOptions copy]];
+      }
       writeDataHook:^(id data, GRPCInterceptorManager *manager) {
         globalWriteDataCount++;
         [manager writeNextInterceptorWithData:data];
@@ -1865,7 +1975,7 @@ static dispatch_once_t initGlobalInterceptorFactory;
   options.interceptorFactories = @[ factory ];
   globalInterceptorFactory.enabled = YES;
 
-  __block BOOL canWriteData = NO;
+  __block int writeMessageCount = 0;
   __block GRPCStreamingProtoCall *call = [_service
       fullDuplexCallWithResponseHandler:[[InteropTestsBlockCallbacks alloc]
                                             initWithInitialMetadataCallback:nil
@@ -1875,7 +1985,9 @@ static dispatch_once_t initGlobalInterceptorFactory;
                                                 id request = [RMTStreamingOutputCallRequest
                                                     messageWithPayloadSize:requests[index]
                                                      requestedResponseSize:responses[index]];
-                                                canWriteData = NO;
+                                                XCTAssertLessThanOrEqual(
+                                                    index, writeMessageCount,
+                                                    @"Message received before writing message.");
                                                 [call writeMessage:request];
                                                 [call receiveNextMessage];
                                               } else {
@@ -1887,14 +1999,14 @@ static dispatch_once_t initGlobalInterceptorFactory;
                                               [expectation fulfill];
                                             }
                                             writeMessageCallback:^{
-                                              canWriteData = YES;
+                                              writeMessageCount++;
                                             }]
                             callOptions:options];
   [call start];
   [call receiveNextMessage];
   [call writeMessage:request];
 
-  [self waitForExpectationsWithTimeout:TEST_TIMEOUT handler:nil];
+  [self waitForExpectationsWithTimeout:STREAMING_CALL_TEST_TIMEOUT handler:nil];
   XCTAssertEqual(startCount, 1);
   XCTAssertEqual(writeDataCount, 4);
   XCTAssertEqual(finishCount, 1);

@@ -100,7 +100,7 @@ static void test_channel_create_with_args(void) {
 
 grpc_channel_args* mutate_channel_args(const char* target,
                                        grpc_channel_args* old_args,
-                                       grpc_channel_stack_type type) {
+                                       grpc_channel_stack_type /*type*/) {
   GPR_ASSERT(old_args != nullptr);
   GPR_ASSERT(grpc_channel_args_find(old_args, "arg_int")->value.integer == 0);
   GPR_ASSERT(strcmp(grpc_channel_args_find(old_args, "arg_str")->value.string,
@@ -206,7 +206,8 @@ int main(int argc, char** argv) {
   test_channel_create_with_args();
   test_server_create_with_args();
   // This has to be the last test.
-  test_channel_create_with_global_mutator();
+  // TODO(markdroth): re-enable this test once client_idle is re-enabled
+  // test_channel_create_with_global_mutator();
   grpc_shutdown();
   return 0;
 }

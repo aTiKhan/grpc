@@ -62,13 +62,12 @@ class ThreadPoolInterface {
 // NULL closure.
 class ThreadPoolWorker {
  public:
-  ThreadPoolWorker(const char* thd_name, ThreadPoolInterface* pool,
-                   MPMCQueueInterface* queue, Thread::Options& options,
-                   int index)
+  ThreadPoolWorker(const char* thd_name, MPMCQueueInterface* queue,
+                   Thread::Options& options, int index)
       : queue_(queue), thd_name_(thd_name), index_(index) {
-    thd_ = Thread(thd_name,
-                  [](void* th) { static_cast<ThreadPoolWorker*>(th)->Run(); },
-                  this, nullptr, options);
+    thd_ = Thread(
+        thd_name, [](void* th) { static_cast<ThreadPoolWorker*>(th)->Run(); },
+        this, nullptr, options);
   }
 
   ~ThreadPoolWorker() {}
@@ -100,7 +99,7 @@ class ThreadPool : public ThreadPoolInterface {
   // Creates a thread pool with size of "num_threads", with default thread name
   // "ThreadPoolWorker" and all thread options set to default. If the given size
   // is 0 or less, there will be 1 worker thread created inside pool.
-  ThreadPool(int num_threads);
+  explicit ThreadPool(int num_threads);
 
   // Same as ThreadPool(int num_threads) constructor, except
   // that it also sets "thd_name" as the name of all threads in the thread pool.

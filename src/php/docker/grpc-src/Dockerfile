@@ -18,29 +18,27 @@ RUN apt-get -qq update && apt-get -qq install -y \
   autoconf automake git libtool pkg-config \
   valgrind wget zlib1g-dev
 
+ARG MAKEFLAGS=-j8
+
 
 WORKDIR /tmp
 
-RUN wget https://phar.phpunit.de/phpunit-4.8.36.phar && \
-  mv phpunit-4.8.36.phar /usr/local/bin/phpunit && \
+RUN wget https://phar.phpunit.de/phpunit-8.5.13.phar && \
+  mv phpunit-8.5.13.phar /usr/local/bin/phpunit && \
   chmod +x /usr/local/bin/phpunit
 
 
 WORKDIR /github/grpc
 
-RUN git clone https://github.com/grpc/grpc . && \
-  git submodule update --init && \
-  make && make install
+COPY . .
+
+RUN make shared_c static_c
 
 
 WORKDIR /github/grpc/src/php/ext/grpc
 
-COPY src/php/ext/grpc/*.c ./
-COPY src/php/ext/grpc/*.h ./
-COPY src/php/ext/grpc/config.m4 ./
-
 RUN phpize && \
-  ./configure --enable-tests && \
+  GRPC_LIB_SUBDIR=libs/opt ./configure --enable-grpc=/github/grpc --enable-tests && \
   make && \
   make install
 

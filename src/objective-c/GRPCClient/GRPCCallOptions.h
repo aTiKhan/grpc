@@ -24,7 +24,10 @@ NS_ASSUME_NONNULL_BEGIN
 
 @protocol GRPCInterceptorFactory;
 
-@interface GRPCCallOptions : NSObject<NSCopying, NSMutableCopying>
+/**
+ * Immutable user configurable options for a gRPC call.
+ */
+@interface GRPCCallOptions : NSObject <NSCopying, NSMutableCopying>
 
 // Call parameters
 /**
@@ -87,6 +90,12 @@ NS_ASSUME_NONNULL_BEGIN
  * user-agent string.
  */
 @property(copy, readonly, nullable) NSString *userAgentPrefix;
+
+/**
+ * Custom string that is suffixed to a request's user-agent header field after gRPC's internal
+ * user-agent string.
+ */
+@property(copy, readonly, nullable) NSString *userAgentSuffix;
 
 /**
  * The size limit for the response received from server. If it is exceeded, an error with status
@@ -194,7 +203,10 @@ NS_ASSUME_NONNULL_BEGIN
 
 @end
 
-@interface GRPCMutableCallOptions : GRPCCallOptions<NSCopying, NSMutableCopying>
+/**
+ * Mutable user configurable options for a gRPC call.
+ */
+@interface GRPCMutableCallOptions : GRPCCallOptions <NSCopying, NSMutableCopying>
 
 // Call parameters
 /**
@@ -263,6 +275,12 @@ NS_ASSUME_NONNULL_BEGIN
  * user-agent string.
  */
 @property(copy, readwrite, nullable) NSString *userAgentPrefix;
+
+/**
+ * Custom string that is suffixed to a request's user-agent header field after gRPC's internal
+ * user-agent string.
+ */
+@property(copy, readwrite, nullable) NSString *userAgentSuffix;
 
 /**
  * The size limit for the response received from server. If it is exceeded, an error with status
