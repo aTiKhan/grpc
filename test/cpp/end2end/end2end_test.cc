@@ -16,6 +16,13 @@
  *
  */
 
+#include <mutex>
+#include <thread>
+
+#include "absl/memory/memory.h"
+#include "absl/strings/match.h"
+#include "absl/strings/str_format.h"
+
 #include <grpc/grpc.h>
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
@@ -23,7 +30,6 @@
 #include <grpcpp/channel.h>
 #include <grpcpp/client_context.h>
 #include <grpcpp/create_channel.h>
-#include <grpcpp/impl/codegen/status_code_enum.h>
 #include <grpcpp/resource_quota.h>
 #include <grpcpp/security/auth_metadata_processor.h>
 #include <grpcpp/security/credentials.h>
@@ -33,13 +39,6 @@
 #include <grpcpp/server_context.h>
 #include <grpcpp/support/string_ref.h>
 #include <grpcpp/test/channel_test_peer.h>
-
-#include <mutex>
-#include <thread>
-
-#include "absl/memory/memory.h"
-#include "absl/strings/match.h"
-#include "absl/strings/str_format.h"
 
 #include "src/core/ext/filters/client_channel/backup_poller.h"
 #include "src/core/lib/gpr/env.h"
@@ -248,7 +247,7 @@ class TestAuthMetadataProcessor : public AuthMetadataProcessor {
 const char TestAuthMetadataProcessor::kGoodGuy[] = "Dr Jekyll";
 const char TestAuthMetadataProcessor::kIdentityPropName[] = "novel identity";
 
-class Proxy : public ::grpc::testing::EchoTestService::Service {
+class Proxy : public grpc::testing::EchoTestService::Service {
  public:
   explicit Proxy(const std::shared_ptr<Channel>& channel)
       : stub_(grpc::testing::EchoTestService::NewStub(channel)) {}
@@ -261,11 +260,11 @@ class Proxy : public ::grpc::testing::EchoTestService::Service {
   }
 
  private:
-  std::unique_ptr<::grpc::testing::EchoTestService::Stub> stub_;
+  std::unique_ptr<grpc::testing::EchoTestService::Stub> stub_;
 };
 
 class TestServiceImplDupPkg
-    : public ::grpc::testing::duplicate::EchoTestService::Service {
+    : public grpc::testing::duplicate::EchoTestService::Service {
  public:
   Status Echo(ServerContext* /*context*/, const EchoRequest* /*request*/,
               EchoResponse* response) override {
@@ -291,8 +290,7 @@ class TestScenario {
   bool callback_server;
 };
 
-static std::ostream& operator<<(std::ostream& out,
-                                const TestScenario& scenario) {
+std::ostream& operator<<(std::ostream& out, const TestScenario& scenario) {
   return out << "TestScenario{use_interceptors="
              << (scenario.use_interceptors ? "true" : "false")
              << ", use_proxy=" << (scenario.use_proxy ? "true" : "false")
@@ -405,8 +403,8 @@ class End2endTest : public ::testing::TestWithParam<TestScenario> {
 
     if (!GetParam().inproc) {
       if (!GetParam().use_interceptors) {
-        channel_ = ::grpc::CreateCustomChannel(server_address_.str(),
-                                               channel_creds, args);
+        channel_ = grpc::CreateCustomChannel(server_address_.str(),
+                                             channel_creds, args);
       } else {
         channel_ = CreateCustomChannelWithInterceptors(
             server_address_.str(), channel_creds, args,
@@ -469,8 +467,8 @@ class End2endTest : public ::testing::TestWithParam<TestScenario> {
   int first_picked_port_;
 };
 
-static void SendRpc(grpc::testing::EchoTestService::Stub* stub, int num_rpcs,
-                    bool with_binary_metadata) {
+void SendRpc(grpc::testing::EchoTestService::Stub* stub, int num_rpcs,
+             bool with_binary_metadata) {
   EchoRequest request;
   EchoResponse response;
   request.set_message("Hello hello hello hello");
@@ -1384,6 +1382,24 @@ TEST_P(End2endTest, ChannelStateTimeout) {
   }
 }
 
+TEST_P(End2endTest, ChannelStateOnLameChannel) {
+  if ((GetParam().credentials_type != kInsecureCredentialsType) ||
+      GetParam().inproc) {
+    return;
+  }
+  // Channel using invalid target URI.  This creates a lame channel.
+  auto channel = grpc::CreateChannel("dns:///", InsecureChannelCredentials());
+  // Channel should immediately report TRANSIENT_FAILURE.
+  EXPECT_EQ(GRPC_CHANNEL_TRANSIENT_FAILURE, channel->GetState(true));
+  // And state will never change.
+  auto state = GRPC_CHANNEL_TRANSIENT_FAILURE;
+  for (int i = 0; i < 10; ++i) {
+    channel->WaitForStateChange(
+        state, std::chrono::system_clock::now() + std::chrono::seconds(1));
+    state = channel->GetState(false);
+  }
+}
+
 // Talking to a non-existing service.
 TEST_P(End2endTest, NonExistingService) {
   ResetChannel();
@@ -1464,8 +1480,11 @@ TEST_P(End2endTest, ExpectErrorTest) {
     EXPECT_EQ(iter->error_message(), s.error_message());
     EXPECT_EQ(iter->binary_error_details(), s.error_details());
     EXPECT_TRUE(absl::StrContains(context.debug_error_string(), "created"));
+#ifndef NDEBUG
+    // GRPC_ERROR_INT_FILE_LINE is for debug only
     EXPECT_TRUE(absl::StrContains(context.debug_error_string(), "file"));
     EXPECT_TRUE(absl::StrContains(context.debug_error_string(), "line"));
+#endif
     EXPECT_TRUE(absl::StrContains(context.debug_error_string(), "status"));
     EXPECT_TRUE(absl::StrContains(context.debug_error_string(), "13"));
   }
@@ -1631,7 +1650,7 @@ TEST_P(ProxyEnd2endTest, ClientCancelsRpc) {
   Status s = stub_->Echo(&context, request, &response);
   cancel_thread.join();
   EXPECT_EQ(StatusCode::CANCELLED, s.error_code());
-  EXPECT_EQ(s.error_message(), "Cancelled");
+  EXPECT_EQ(s.error_message(), "CANCELLED");
 }
 
 // Server cancels rpc after 1ms

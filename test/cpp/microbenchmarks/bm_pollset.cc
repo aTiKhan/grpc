@@ -18,7 +18,10 @@
 
 /* Test out pollset latencies */
 
+#include <string.h>
+
 #include <benchmark/benchmark.h>
+
 #include <grpc/grpc.h>
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
@@ -28,12 +31,9 @@
 #include "src/core/lib/iomgr/pollset.h"
 #include "src/core/lib/iomgr/port.h"
 #include "src/core/lib/iomgr/wakeup_fd_posix.h"
-
 #include "test/core/util/test_config.h"
 #include "test/cpp/microbenchmarks/helpers.h"
 #include "test/cpp/util/test_config.h"
-
-#include <string.h>
 
 #ifdef GRPC_LINUX_MULTIPOLL_WITH_EPOLL
 #include <sys/epoll.h>
@@ -262,7 +262,7 @@ int main(int argc, char** argv) {
   grpc::testing::TestEnvironment env(argc, argv);
   LibraryInitializer libInit;
   ::benchmark::Initialize(&argc, argv);
-  ::grpc::testing::InitTest(&argc, &argv, false);
+  grpc::testing::InitTest(&argc, &argv, false);
   benchmark::RunTheBenchmarksNamespaced();
   return 0;
 }

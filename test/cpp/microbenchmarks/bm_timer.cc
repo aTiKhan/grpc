@@ -16,10 +16,12 @@
  *
  */
 
-#include <benchmark/benchmark.h>
 #include <string.h>
+
 #include <atomic>
 #include <vector>
+
+#include <benchmark/benchmark.h>
 
 #include <grpc/grpc.h>
 #include <grpc/support/alloc.h>
@@ -115,7 +117,7 @@ int main(int argc, char** argv) {
   grpc::testing::TestEnvironment env(argc, argv);
   LibraryInitializer libInit;
   ::benchmark::Initialize(&argc, argv);
-  ::grpc::testing::InitTest(&argc, &argv, false);
+  grpc::testing::InitTest(&argc, &argv, false);
   benchmark::RunTheBenchmarksNamespaced();
   return 0;
 }

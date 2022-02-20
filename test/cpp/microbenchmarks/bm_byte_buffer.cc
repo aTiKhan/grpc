@@ -21,6 +21,7 @@
 #include <memory>
 
 #include <benchmark/benchmark.h>
+
 #include <grpcpp/impl/grpc_library.h>
 #include <grpcpp/support/byte_buffer.h>
 
@@ -127,7 +128,7 @@ int main(int argc, char** argv) {
   grpc::testing::TestEnvironment env(argc, argv);
   LibraryInitializer libInit;
   ::benchmark::Initialize(&argc, argv);
-  ::grpc::testing::InitTest(&argc, &argv, false);
+  grpc::testing::InitTest(&argc, &argv, false);
 
   benchmark::RunTheBenchmarksNamespaced();
   return 0;

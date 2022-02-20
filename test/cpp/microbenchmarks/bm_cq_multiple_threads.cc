@@ -16,9 +16,11 @@
  *
  */
 
-#include <benchmark/benchmark.h>
 #include <string.h>
+
 #include <atomic>
+
+#include <benchmark/benchmark.h>
 
 #include <grpc/grpc.h>
 #include <grpc/support/alloc.h>
@@ -160,7 +162,7 @@ static void teardown() {
 */
 static void BM_Cq_Throughput(benchmark::State& state) {
   gpr_timespec deadline = gpr_inf_future(GPR_CLOCK_MONOTONIC);
-  auto thd_idx = state.thread_index;
+  auto thd_idx = state.thread_index();
 
   gpr_mu_lock(&g_mu);
   g_threads_active++;
@@ -220,7 +222,7 @@ int main(int argc, char** argv) {
   gpr_mu_init(&g_mu);
   gpr_cv_init(&g_cv);
   ::benchmark::Initialize(&argc, argv);
-  ::grpc::testing::InitTest(&argc, &argv, false);
+  grpc::testing::InitTest(&argc, &argv, false);
   benchmark::RunTheBenchmarksNamespaced();
   return 0;
 }

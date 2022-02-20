@@ -22,14 +22,15 @@
 #ifdef GRPC_POSIX_SOCKET_TCP
 
 #include <arpa/inet.h>
-#include <openssl/err.h>
-#include <openssl/ssl.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
 #include <string>
+
+#include <openssl/err.h>
+#include <openssl/ssl.h>
 
 #include "absl/strings/str_cat.h"
 
@@ -63,13 +64,15 @@ class SslLibraryInfo {
 
   void Await() {
     grpc_core::MutexLock lock(&mu_);
-    grpc_core::WaitUntil(&cv_, &mu_, [this] { return ready_; });
+    while (!ready_) {
+      cv_.Wait(&mu_);
+    }
   }
 
  private:
   grpc_core::Mutex mu_;
   grpc_core::CondVar cv_;
-  bool ready_ = false;
+  bool ready_ ABSL_GUARDED_BY(mu_) = false;
 };
 
 // Arguments for TLS server thread.
@@ -338,8 +341,8 @@ static bool client_ssl_test(char* server_alpn_preferred) {
   grpc_channel_args grpc_args;
   grpc_args.num_args = 1;
   grpc_args.args = &ssl_name_override;
-  grpc_channel* channel = grpc_secure_channel_create(ssl_creds, target.c_str(),
-                                                     &grpc_args, nullptr);
+  grpc_channel* channel =
+      grpc_channel_create(target.c_str(), ssl_creds, &grpc_args);
   GPR_ASSERT(channel);
 
   // Initially the channel will be idle, the

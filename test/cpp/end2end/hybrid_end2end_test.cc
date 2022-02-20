@@ -19,6 +19,8 @@
 #include <memory>
 #include <thread>
 
+#include <gtest/gtest.h>
+
 #include <grpc/grpc.h>
 #include <grpcpp/channel.h>
 #include <grpcpp/client_context.h>
@@ -36,8 +38,6 @@
 #include "test/core/util/test_config.h"
 #include "test/cpp/end2end/test_service_impl.h"
 #include "test/cpp/util/byte_buffer_proto_helper.h"
-
-#include <gtest/gtest.h>
 
 namespace grpc {
 namespace testing {
@@ -217,7 +217,7 @@ void HandleGenericCall(AsyncGenericService* service,
 }
 
 class TestServiceImplDupPkg
-    : public ::grpc::testing::duplicate::EchoTestService::Service {
+    : public grpc::testing::duplicate::EchoTestService::Service {
  public:
   Status Echo(ServerContext* /*context*/, const EchoRequest* request,
               EchoResponse* response) override {
@@ -245,7 +245,7 @@ class HybridEnd2endTest : public ::testing::TestWithParam<bool> {
                   : false;
   }
 
-  bool SetUpServer(::grpc::Service* service1, ::grpc::Service* service2,
+  bool SetUpServer(grpc::Service* service1, grpc::Service* service2,
                    AsyncGenericService* generic_service,
                    CallbackGenericService* callback_generic_service,
                    int max_message_size = 0) {

@@ -23,9 +23,13 @@ cd cmake/build
 cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo \
       -DgRPC_BACKWARDS_COMPATIBILITY_MODE=ON \
       -DgRPC_BUILD_TESTS=OFF \
+      -DgRPC_XDS_USER_AGENT_IS_CSHARP=ON \
       ../..
 
-make grpc_csharp_ext -j2
+# Use externally provided env to determine build parallelism, otherwise use default.
+GRPC_CSHARP_BUILD_EXT_COMPILER_JOBS=${GRPC_CSHARP_BUILD_EXT_COMPILER_JOBS:-2}
+
+make grpc_csharp_ext "-j${GRPC_CSHARP_BUILD_EXT_COMPILER_JOBS}"
 
 if [ -f "libgrpc_csharp_ext.so" ]
 then

@@ -18,20 +18,21 @@
 
 #include "src/core/ext/filters/fault_injection/fault_injection_filter.h"
 
+#include <atomic>
+
 #include "absl/strings/numbers.h"
 
+#include <grpc/status.h>
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 
-#include "src/core/ext/filters/client_channel/service_config.h"
-#include "src/core/ext/filters/client_channel/service_config_call_data.h"
 #include "src/core/ext/filters/fault_injection/service_config_parser.h"
 #include "src/core/lib/channel/channel_stack.h"
 #include "src/core/lib/channel/status_util.h"
-#include "src/core/lib/gprpp/atomic.h"
 #include "src/core/lib/gprpp/sync.h"
 #include "src/core/lib/iomgr/closure.h"
 #include "src/core/lib/iomgr/timer.h"
+#include "src/core/lib/service_config/service_config_call_data.h"
 #include "src/core/lib/transport/status_conversion.h"
 
 namespace grpc_core {
@@ -40,36 +41,16 @@ TraceFlag grpc_fault_injection_filter_trace(false, "fault_injection_filter");
 
 namespace {
 
-Atomic<uint32_t> g_active_faults{0};
+std::atomic<uint32_t> g_active_faults{0};
 static_assert(
-    std::is_trivially_destructible<Atomic<uint32_t>>::value,
+    std::is_trivially_destructible<std::atomic<uint32_t>>::value,
     "the active fault counter needs to have a trivially destructible type");
 
-inline int GetLinkedMetadatumValueInt(grpc_linked_mdelem* md) {
-  int res;
-  if (absl::SimpleAtoi(StringViewFromSlice(GRPC_MDVALUE(md->md)), &res)) {
-    return res;
-  } else {
-    return -1;
-  }
-}
-
-inline uint32_t GetLinkedMetadatumValueUnsignedInt(grpc_linked_mdelem* md) {
-  uint32_t res;
-  if (absl::SimpleAtoi(StringViewFromSlice(GRPC_MDVALUE(md->md)), &res)) {
-    return res;
-  } else {
-    return -1;
-  }
-}
-
-inline int64_t GetLinkedMetadatumValueInt64(grpc_linked_mdelem* md) {
-  int64_t res;
-  if (absl::SimpleAtoi(StringViewFromSlice(GRPC_MDVALUE(md->md)), &res)) {
-    return res;
-  } else {
-    return -1;
-  }
+template <typename T>
+auto AsInt(absl::string_view s) -> absl::optional<T> {
+  T x;
+  if (absl::SimpleAtoi(s, &x)) return x;
+  return absl::nullopt;
 }
 
 inline bool UnderFraction(const uint32_t numerator,
@@ -140,7 +121,7 @@ class CallData {
 
   // Finishes the fault injection, should only be called once.
   void FaultInjectionFinished() {
-    g_active_faults.FetchSub(1, MemoryOrder::RELAXED);
+    g_active_faults.fetch_sub(1, std::memory_order_relaxed);
   }
 
   // This is a callback that will be invoked after the delay timer is up.
@@ -346,40 +327,47 @@ void CallData::DecideWhetherToInjectFaults(
                 *fi_policy_);
       }
     };
-    for (grpc_linked_mdelem* md = initial_metadata->list.head; md != nullptr;
-         md = md->next) {
-      absl::string_view key = StringViewFromSlice(GRPC_MDKEY(md->md));
-      // Only perform string comparison if:
-      //   1. Needs to check this header;
-      //   2. The value is not been filled before.
-      if (!fi_policy_->abort_code_header.empty() &&
-          (copied_policy == nullptr ||
-           copied_policy->abort_code == GRPC_STATUS_OK) &&
-          key == fi_policy_->abort_code_header) {
+    std::string buffer;
+    if (!fi_policy_->abort_code_header.empty() &&
+        (copied_policy == nullptr ||
+         copied_policy->abort_code == GRPC_STATUS_OK)) {
+      auto value = initial_metadata->GetStringValue(
+          fi_policy_->abort_code_header, &buffer);
+      if (value.has_value()) {
         maybe_copy_policy_func();
-        grpc_status_code_from_int(GetLinkedMetadatumValueInt(md),
-                                  &copied_policy->abort_code);
+        grpc_status_code_from_int(
+            AsInt<int>(*value).value_or(GRPC_STATUS_UNKNOWN),
+            &copied_policy->abort_code);
       }
-      if (!fi_policy_->abort_percentage_header.empty() &&
-          key == fi_policy_->abort_percentage_header) {
+    }
+    if (!fi_policy_->abort_percentage_header.empty()) {
+      auto value = initial_metadata->GetStringValue(
+          fi_policy_->abort_percentage_header, &buffer);
+      if (value.has_value()) {
         maybe_copy_policy_func();
         copied_policy->abort_percentage_numerator =
-            GPR_MIN(GetLinkedMetadatumValueUnsignedInt(md),
-                    fi_policy_->abort_percentage_numerator);
+            std::min(AsInt<uint32_t>(*value).value_or(-1),
+                     fi_policy_->abort_percentage_numerator);
       }
-      if (!fi_policy_->delay_header.empty() &&
-          (copied_policy == nullptr || copied_policy->delay == 0) &&
-          key == fi_policy_->delay_header) {
+    }
+    if (!fi_policy_->delay_header.empty() &&
+        (copied_policy == nullptr || copied_policy->delay == 0)) {
+      auto value =
+          initial_metadata->GetStringValue(fi_policy_->delay_header, &buffer);
+      if (value.has_value()) {
         maybe_copy_policy_func();
         copied_policy->delay = static_cast<grpc_millis>(
-            GPR_MAX(GetLinkedMetadatumValueInt64(md), 0));
+            std::max(AsInt<int64_t>(*value).value_or(0), int64_t(0)));
       }
-      if (!fi_policy_->delay_percentage_header.empty() &&
-          key == fi_policy_->delay_percentage_header) {
+    }
+    if (!fi_policy_->delay_percentage_header.empty()) {
+      auto value = initial_metadata->GetStringValue(
+          fi_policy_->delay_percentage_header, &buffer);
+      if (value.has_value()) {
         maybe_copy_policy_func();
         copied_policy->delay_percentage_numerator =
-            GPR_MIN(GetLinkedMetadatumValueUnsignedInt(md),
-                    fi_policy_->delay_percentage_numerator);
+            std::min(AsInt<uint32_t>(*value).value_or(-1),
+                     fi_policy_->delay_percentage_numerator);
       }
     }
     if (copied_policy != nullptr) fi_policy_ = copied_policy;
@@ -400,10 +388,11 @@ void CallData::DecideWhetherToInjectFaults(
 }
 
 bool CallData::HaveActiveFaultsQuota(bool increment) {
-  if (g_active_faults.Load(MemoryOrder::ACQUIRE) >= fi_policy_->max_faults) {
+  if (g_active_faults.load(std::memory_order_acquire) >=
+      fi_policy_->max_faults) {
     return false;
   }
-  if (increment) g_active_faults.FetchAdd(1, MemoryOrder::RELAXED);
+  if (increment) g_active_faults.fetch_add(1, std::memory_order_relaxed);
   return true;
 }
 
@@ -454,8 +443,10 @@ void CallData::ResumeBatch(void* arg, grpc_error_handle error) {
   // Abort if needed.
   error = calld->MaybeAbort();
   if (error != GRPC_ERROR_NONE) {
+    calld->abort_error_ = error;
     grpc_transport_stream_op_batch_finish_with_failure(
-        calld->delayed_batch_, error, calld->call_combiner_);
+        calld->delayed_batch_, GRPC_ERROR_REF(calld->abort_error_),
+        calld->call_combiner_);
     return;
   }
   // Chain to the next filter.
@@ -480,6 +471,7 @@ void CallData::HijackedRecvTrailingMetadataReady(void* arg,
 
 extern const grpc_channel_filter FaultInjectionFilterVtable = {
     CallData::StartTransportStreamOpBatch,
+    nullptr,
     grpc_channel_next_op,
     sizeof(CallData),
     CallData::Init,
@@ -493,7 +485,7 @@ extern const grpc_channel_filter FaultInjectionFilterVtable = {
 };
 
 void FaultInjectionFilterInit(void) {
-  grpc_core::FaultInjectionServiceConfigParser::Register();
+  FaultInjectionServiceConfigParser::Register();
 }
 
 void FaultInjectionFilterShutdown(void) {}
